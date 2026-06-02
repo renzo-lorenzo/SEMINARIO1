@@ -1,0 +1,43 @@
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Archivos temporales
+*.tmp
+*.temp
+*.log
+
+# Resultados generados
+resultados/
+outputs/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Configuración de editores
+.vscode/
+.idea/
+
+# Videos pesados
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Imágenes procesadas o generadas
+*_resultado*.png
+*_analisis*.png
+
+# Dataset o archivos grandes
+dataset/
+data/
