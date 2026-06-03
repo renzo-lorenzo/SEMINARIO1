@@ -1,66 +1,62 @@
 import streamlit as st
 import time
+import os
+import base64
+import os
 
+def mostrar_video_autoplay(ruta_video, ancho="70%"):
+    if not os.path.exists(ruta_video):
+        st.warning("No se encontró el video tutorial.")
+        return
+
+    with open(ruta_video, "rb") as video_file:
+        video_bytes = video_file.read()
+
+    video_base64 = base64.b64encode(video_bytes).decode()
+
+    video_html = f"""
+    <div style="display: flex; justify-content: center;">
+        <video width="{ancho}" autoplay muted playsinline style="border-radius: 18px;">
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+        </video>
+    </div>
+    """
+
+    st.markdown(video_html, unsafe_allow_html=True)
 
 def pantalla_tutorial():
     ejercicio = st.session_state.get("ejercicio_actual", None)
 
     if ejercicio is None:
         st.warning("No se seleccionó ningún ejercicio.")
-        if st.button("Volver al mapa de niveles"):
+        if st.button("Volver al mapa"):
             st.session_state.pantalla = "mapa"
             st.rerun()
         return
 
     st.markdown(
-        f'<div class="title">{ejercicio["nombre"]}</div>',
+        f'<div class="title">Tutorial: {ejercicio["nombre"]}</div>',
         unsafe_allow_html=True
     )
 
     st.markdown(
-        '<div class="subtitle">Antes de iniciar, revisa el video tutorial del ejercicio</div>',
+        '<div class="subtitle">Observa la demostración antes de iniciar el ejercicio</div>',
         unsafe_allow_html=True
     )
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.info("La cámara se activará automáticamente cuando termine esta indicación.")
 
-    st.subheader("Ten en cuenta el video tutorial")
+    ruta_tutorial = "imagenes/tutorial_flexion.mp4"
 
-    st.write(
-        "Observa con atención la postura, el movimiento de la rodilla y la velocidad del ejercicio antes de iniciar."
-    )
+    mostrar_video_autoplay(ruta_tutorial, ancho="70%")
 
-    # OPCIÓN 1: Video desde archivo local
-    # Guarda tu video en la carpeta imagenes con el nombre tutorial_flexion.mp4
-    ruta_video = "imagenes/tutorial_flexion.mp4"
+    contador = st.empty()
 
-    try:
-        st.video(ruta_video)
-    except:
-        st.info("Aquí aparecerá el video tutorial cuando lo agregues en la carpeta imagenes.")
+    duracion_tutorial = 8
 
-    st.markdown("""
-    **Recomendaciones antes de iniciar:**
+    for segundos in range(duracion_tutorial, 0, -1):
+        contador.info(f"El ejercicio iniciará automáticamente en {segundos} segundos...")
+        time.sleep(1)
 
-    - Mantén el cuerpo completo visible frente a la cámara.
-    - Realiza el movimiento de forma lenta y controlada.
-    - Evita movimientos bruscos.
-    - Detén el ejercicio si sientes dolor intenso.
-    """)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("Volver al mapa de niveles", use_container_width=True):
-            st.session_state.pantalla = "mapa"
-            st.rerun()
-
-    with col2:
-        if st.button("Listo para iniciar", use_container_width=True):
-            st.session_state.pantalla = "ejercicio"
-            st.session_state.repeticiones = 0
-            st.session_state.total_repeticiones = 10
-            st.session_state.tiempo_inicio = time.time()
-            st.rerun()
+    st.session_state.pantalla = "ejercicio"
+    st.rerun()

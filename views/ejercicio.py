@@ -3,10 +3,11 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
+import os
+import base64
 
 
 mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
 
 
 def calcular_angulo(a, b, c):
@@ -24,24 +25,34 @@ def calcular_angulo(a, b, c):
     return angulo
 
 
+def mostrar_video_loop(ruta_video):
+    if not os.path.exists(ruta_video):
+        st.warning("No se encontró la animación del ejercicio.")
+        return
+
+    with open(ruta_video, "rb") as video_file:
+        video_bytes = video_file.read()
+
+    video_base64 = base64.b64encode(video_bytes).decode()
+
+    video_html = f"""
+    <video width="100%" autoplay loop muted playsinline style="border-radius: 16px;">
+        <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+    </video>
+    """
+
+    st.markdown(video_html, unsafe_allow_html=True)
+
+
 def pantalla_ejercicio():
     ejercicio = st.session_state.get("ejercicio_actual", None)
 
     if ejercicio is None:
         st.warning("No se seleccionó ningún ejercicio.")
-        if st.button("Volver al mapa de niveles"):
+        if st.button("Volver al mapa"):
             st.session_state.pantalla = "mapa"
             st.rerun()
         return
-
-    if "repeticiones" not in st.session_state:
-        st.session_state.repeticiones = 0
-
-    if "total_repeticiones" not in st.session_state:
-        st.session_state.total_repeticiones = 10
-
-    if "tiempo_inicio" not in st.session_state:
-        st.session_state.tiempo_inicio = time.time()
 
     st.markdown(
         f'<div class="title">{ejercicio["nombre"]}</div>',
@@ -53,102 +64,44 @@ def pantalla_ejercicio():
         unsafe_allow_html=True
     )
 
-    tiempo_actual = int(time.time() - st.session_state.tiempo_inicio)
-    minutos = tiempo_actual // 60
-    segundos = tiempo_actual % 60
+    st.info("Ubícate frente a la cámara. El sistema analizará tu movimiento automáticamente.")
 
-    progreso = st.session_state.repeticiones / st.session_state.total_repeticiones
-    porcentaje = int(progreso * 100)
+    col_camara, col_derecha = st.columns([2.2, 1])
 
-    col1, col2, col3 = st.columns(3)
+    with col_camara:
+        st.subheader("Cámara del paciente")
+        camara_placeholder = st.empty()
 
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-number">{minutos:02d}:{segundos:02d}</div>
-            <div class="metric-label">Temporizador</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with col_derecha:
+        st.subheader("Animación guía")
+        animacion_placeholder = st.empty()
 
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-number">{st.session_state.repeticiones} / {st.session_state.total_repeticiones}</div>
-            <div class="metric-label">Repeticiones completadas</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.subheader("Resultados")
+        resultados_placeholder = st.empty()
 
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-number">{porcentaje}%</div>
-            <div class="metric-label">Progreso</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with animacion_placeholder.container():
+        mostrar_video_loop("imagenes/tutorial_flexion.mp4")
 
-    st.write("")
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Vista de cámara")
-
-    st.info("Colócate frente a la cámara. El sistema contará una repetición cuando flexiones y vuelvas a extender la rodilla.")
-
-    video_placeholder = st.empty()
-    panel_placeholder = st.empty()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.progress(progreso)
-
-    col_a, col_b, col_c = st.columns(3)
-
-    iniciar = False
-
-    with col_a:
-        if st.button("Iniciar cámara", use_container_width=True):
-            iniciar = True
-            st.session_state.repeticiones = 0
-            st.session_state.tiempo_inicio = time.time()
-
-    with col_b:
-        if st.button("Reiniciar ejercicio", use_container_width=True):
-            st.session_state.repeticiones = 0
-            st.session_state.tiempo_inicio = time.time()
-            st.rerun()
-
-    with col_c:
-        if st.button("Finalizar ejercicio", use_container_width=True):
-            puntos_ganados = st.session_state.repeticiones * 10
-            st.session_state.puntos += puntos_ganados
-            st.success(f"Ejercicio finalizado. Ganaste +{puntos_ganados} puntos.")
-
-    col_volver1, col_volver2 = st.columns(2)
-
-    with col_volver1:
-        if st.button("Volver al tutorial", use_container_width=True):
-            st.session_state.pantalla = "tutorial"
-            st.rerun()
-
-    with col_volver2:
-        if st.button("Volver al mapa de niveles", use_container_width=True):
-            st.session_state.pantalla = "mapa"
-            st.rerun()
-
-    if iniciar:
-        ejecutar_camara(video_placeholder, panel_placeholder)
-
-
-def ejecutar_camara(video_placeholder, panel_placeholder):
     cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
-        st.error("No se pudo acceder a la cámara. Revisa que tu webcam esté conectada y no esté siendo usada por otra app.")
+        st.error("No se pudo activar la cámara.")
         return
 
-    estado_movimiento = "extendido"
     repeticiones = 0
-    total_repeticiones = st.session_state.total_repeticiones
+    total_repeticiones = 10
+    puntos_ganados = 0
+
+    estado_movimiento = "extendido"
+    angulo_actual = 0
+    angulo_minimo = 999
+    angulo_maximo = 0
+    angulos = []
+
     tiempo_inicio = time.time()
+    duracion_maxima = 60
+
+    detener = st.button("Detener ejercicio", use_container_width=True)
 
     with mp_pose.Pose(
         static_image_mode=False,
@@ -157,22 +110,20 @@ def ejecutar_camara(video_placeholder, panel_placeholder):
         min_tracking_confidence=0.5
     ) as pose:
 
-        while cap.isOpened() and repeticiones < total_repeticiones:
+        while cap.isOpened():
             ret, frame = cap.read()
 
             if not ret:
-                st.error("No se pudo leer la imagen de la cámara.")
+                st.error("No se pudo leer la cámara.")
                 break
 
             frame = cv2.flip(frame, 1)
-
             height, width, _ = frame.shape
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = pose.process(rgb)
 
-            angulo_rodilla = None
-            mensaje_estado = "Postura no detectada"
+            mensaje = "Colócate de lado y muestra cuerpo completo"
 
             if results.pose_landmarks:
                 landmarks = results.pose_landmarks.landmark
@@ -185,85 +136,116 @@ def ejecutar_camara(video_placeholder, panel_placeholder):
                 punto_rodilla = (int(rodilla.x * width), int(rodilla.y * height))
                 punto_tobillo = (int(tobillo.x * width), int(tobillo.y * height))
 
-                angulo_rodilla = calcular_angulo(
+                angulo_actual = calcular_angulo(
                     punto_cadera,
                     punto_rodilla,
                     punto_tobillo
                 )
 
-                mp_drawing.draw_landmarks(
-                    frame,
-                    results.pose_landmarks,
-                    mp_pose.POSE_CONNECTIONS
-                )
+                angulos.append(angulo_actual)
+                angulo_minimo = min(angulo_minimo, angulo_actual)
+                angulo_maximo = max(angulo_maximo, angulo_actual)
+
+                cv2.line(frame, punto_cadera, punto_rodilla, (255, 255, 255), 4)
+                cv2.line(frame, punto_rodilla, punto_tobillo, (255, 255, 255), 4)
+
+                cv2.circle(frame, punto_cadera, 8, (0, 0, 255), -1)
+                cv2.circle(frame, punto_rodilla, 10, (0, 255, 255), -1)
+                cv2.circle(frame, punto_tobillo, 8, (0, 0, 255), -1)
 
                 cv2.putText(
                     frame,
-                    f"Angulo: {int(angulo_rodilla)}",
-                    (30, 50),
+                    f"{int(angulo_actual)} grados",
+                    (punto_rodilla[0] + 20, punto_rodilla[1] + 40),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
+                    0.8,
                     (0, 255, 255),
                     2
                 )
 
-                if angulo_rodilla < 120 and estado_movimiento == "extendido":
+                if angulo_actual < 120 and estado_movimiento == "extendido":
                     estado_movimiento = "flexionado"
-                    mensaje_estado = "Rodilla flexionada"
+                    mensaje = "Buena flexión, ahora vuelve lentamente"
 
-                elif angulo_rodilla > 150 and estado_movimiento == "flexionado":
+                elif angulo_actual > 150 and estado_movimiento == "flexionado":
                     estado_movimiento = "extendido"
                     repeticiones += 1
-                    st.session_state.repeticiones = repeticiones
-                    mensaje_estado = "Repetición completada"
+                    puntos_ganados += 10
+                    mensaje = "Repetición válida"
 
                 else:
-                    if estado_movimiento == "extendido":
-                        mensaje_estado = "Extiende y luego flexiona la rodilla"
-                    else:
-                        mensaje_estado = "Ahora vuelve a extender la rodilla"
+                    mensaje = "Sigue el movimiento de forma controlada"
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            video_placeholder.image(
+            camara_placeholder.image(
                 frame_rgb,
                 channels="RGB",
                 use_container_width=True
             )
 
             tiempo_actual = int(time.time() - tiempo_inicio)
-            minutos = tiempo_actual // 60
-            segundos = tiempo_actual % 60
-            progreso = repeticiones / total_repeticiones
+            progreso = min(repeticiones / total_repeticiones, 1.0)
 
-            with panel_placeholder.container():
-                col1, col2, col3 = st.columns(3)
+            if angulos:
+                promedio = round(sum(angulos) / len(angulos), 2)
+                min_texto = round(angulo_minimo, 2)
+                max_texto = round(angulo_maximo, 2)
+            else:
+                promedio = "-"
+                min_texto = "-"
+                max_texto = "-"
 
-                with col1:
-                    st.metric("Tiempo", f"{minutos:02d}:{segundos:02d}")
-
-                with col2:
-                    st.metric("Repeticiones", f"{repeticiones} / {total_repeticiones}")
-
-                with col3:
-                    if angulo_rodilla is not None:
-                        st.metric("Ángulo rodilla", f"{int(angulo_rodilla)}°")
-                    else:
-                        st.metric("Ángulo rodilla", "No detectado")
-
+            with resultados_placeholder.container():
+                st.metric("Repeticiones", f"{repeticiones}/{total_repeticiones}")
                 st.progress(progreso)
 
-                if results.pose_landmarks:
-                    st.success(mensaje_estado)
-                else:
-                    st.warning("Colócate frente a la cámara para detectar el cuerpo completo.")
+                st.metric("Ángulo actual", f"{round(angulo_actual, 2)}°")
+                st.write(f"**Estado:** {estado_movimiento}")
+                st.write(f"**Retroalimentación:** {mensaje}")
+
+                st.divider()
+
+                st.write(f"**Ángulo mínimo:** {min_texto}°")
+                st.write(f"**Ángulo máximo:** {max_texto}°")
+                st.write(f"**Promedio:** {promedio}°")
+
+                st.divider()
+
+                st.metric("Puntos ganados", puntos_ganados)
+                st.write(f"**Tiempo:** {tiempo_actual} segundos")
+
+            if repeticiones >= total_repeticiones:
+                st.session_state.puntos += puntos_ganados
+                st.success("Rutina completada correctamente.")
+                st.success(f"Ganaste +{puntos_ganados} puntos.")
+                st.balloons()
+                break
+
+            if tiempo_actual >= duracion_maxima:
+                st.session_state.puntos += puntos_ganados
+                st.warning("Tiempo máximo alcanzado.")
+                st.info(f"Ganaste +{puntos_ganados} puntos.")
+                break
+
+            if detener:
+                st.session_state.puntos += puntos_ganados
+                st.warning("Ejercicio detenido.")
+                st.info(f"Ganaste +{puntos_ganados} puntos.")
+                break
 
             time.sleep(0.03)
 
     cap.release()
 
-    if repeticiones >= total_repeticiones:
-        puntos_ganados = repeticiones * 10
-        st.session_state.puntos += puntos_ganados
-        st.success(f"Rutina completada. Ganaste +{puntos_ganados} puntos.")
-        st.balloons()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Volver al mapa de niveles", use_container_width=True):
+            st.session_state.pantalla = "mapa"
+            st.rerun()
+
+    with col2:
+        if st.button("Volver al dashboard", use_container_width=True):
+            st.session_state.pantalla = "dashboard"
+            st.rerun()
