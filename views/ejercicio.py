@@ -161,7 +161,7 @@ def pantalla_ejercicio():
     angulos = []
 
     tiempo_inicio = time.time()
-    duracion_maxima = 60
+    duracion_maxima = 300
 
     detener = st.button("Detener ejercicio", use_container_width=True)
 
