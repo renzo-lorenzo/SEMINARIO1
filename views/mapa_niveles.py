@@ -55,7 +55,7 @@ def pantalla_mapa_niveles():
 
                     if st.button(
                         f"Iniciar ejercicio {ejercicio['id']}",
-                        key=f"iniciar_{ejercicio['id']}",
+                        key=f"iniciar_{nivel}_{index}_{ejercicio['id']}",
                         use_container_width=True
                     ):
                         st.session_state.ejercicio_actual = ejercicio

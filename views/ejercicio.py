@@ -8,6 +8,8 @@ import base64
 
 
 mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
+mp_styles = mp.solutions.drawing_styles
 
 
 def calcular_angulo(a, b, c):
@@ -47,11 +49,60 @@ def mostrar_video_loop(ruta_video):
 def pantalla_ejercicio():
     ejercicio = st.session_state.get("ejercicio_actual", None)
 
+    if "ejercicio_completado" not in st.session_state:
+        st.session_state.ejercicio_completado = False
+
+    if "puntos_ganados_ultimo" not in st.session_state:
+        st.session_state.puntos_ganados_ultimo = 0
+
     if ejercicio is None:
         st.warning("No se seleccionó ningún ejercicio.")
         if st.button("Volver al mapa"):
             st.session_state.pantalla = "mapa"
             st.rerun()
+        return
+
+    # Pantalla final cuando el ejercicio ya fue completado
+    if st.session_state.ejercicio_completado:
+        st.markdown(
+            f'<div class="title">{ejercicio["nombre"]}</div>',
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            '<div class="subtitle">Ejercicio completado correctamente</div>',
+            unsafe_allow_html=True
+        )
+
+        st.success("Rutina completada correctamente.")
+        st.info(f"Ganaste +{st.session_state.puntos_ganados_ultimo} puntos.")
+
+        col_p1, col_p2 = st.columns(2)
+
+        with col_p1:
+            st.metric("Puntos ganados", st.session_state.puntos_ganados_ultimo)
+
+        with col_p2:
+            st.metric("Puntos actuales", st.session_state.puntos)
+
+        st.write("")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Volver al mapa de niveles", use_container_width=True, key="volver_mapa_completado"):
+                st.session_state.ejercicio_activo = False
+                st.session_state.ejercicio_completado = False
+                st.session_state.pantalla = "mapa"
+                st.rerun()
+
+        with col2:
+            if st.button("Volver al dashboard", use_container_width=True, key="volver_dashboard_completado"):
+                st.session_state.ejercicio_activo = False
+                st.session_state.ejercicio_completado = False
+                st.session_state.pantalla = "dashboard"
+                st.rerun()
+
         return
 
     st.markdown(
@@ -79,8 +130,19 @@ def pantalla_ejercicio():
         st.subheader("Resultados")
         resultados_placeholder = st.empty()
 
+    videos_animacion = {
+        1: "imagenes/tutorial_extension_rodilla.mp4",
+        2: "imagenes/tutorial_elevacion_pierna.mp4",
+        3: "imagenes/tutorial_mini_sentadilla.mp4",
+    }
+
+    ruta_animacion = videos_animacion.get(
+        ejercicio["id"],
+        "imagenes/tutorial_extension_rodilla.mp4"
+    )
+
     with animacion_placeholder.container():
-        mostrar_video_loop("imagenes/tutorial_flexion.mp4")
+        mostrar_video_loop(ruta_animacion)
 
     cap = cv2.VideoCapture(0)
 
@@ -105,12 +167,14 @@ def pantalla_ejercicio():
 
     with mp_pose.Pose(
         static_image_mode=False,
-        model_complexity=0,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
+        model_complexity=1,
+        smooth_landmarks=True,
+        enable_segmentation=False,
+        min_detection_confidence=0.6,
+        min_tracking_confidence=0.6
     ) as pose:
 
-        while cap.isOpened():
+        while cap.isOpened() and st.session_state.get("ejercicio_activo", True):
             ret, frame = cap.read()
 
             if not ret:
@@ -128,6 +192,15 @@ def pantalla_ejercicio():
             if results.pose_landmarks:
                 landmarks = results.pose_landmarks.landmark
 
+                # Muestra todo el cuerpo con MediaPipe
+                mp_drawing.draw_landmarks(
+                    frame,
+                    results.pose_landmarks,
+                    mp_pose.POSE_CONNECTIONS,
+                    landmark_drawing_spec=mp_styles.get_default_pose_landmarks_style()
+                )
+
+                # Para el análisis solo usamos cadera, rodilla y tobillo
                 cadera = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
                 rodilla = landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value]
                 tobillo = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
@@ -146,6 +219,7 @@ def pantalla_ejercicio():
                 angulo_minimo = min(angulo_minimo, angulo_actual)
                 angulo_maximo = max(angulo_maximo, angulo_actual)
 
+                # Resalta la pierna analizada
                 cv2.line(frame, punto_cadera, punto_rodilla, (255, 255, 255), 4)
                 cv2.line(frame, punto_rodilla, punto_tobillo, (255, 255, 255), 4)
 
@@ -217,19 +291,26 @@ def pantalla_ejercicio():
 
             if repeticiones >= total_repeticiones:
                 st.session_state.puntos += puntos_ganados
-                st.success("Rutina completada correctamente.")
-                st.success(f"Ganaste +{puntos_ganados} puntos.")
+                st.session_state.puntos_ganados_ultimo = puntos_ganados
+                st.session_state.ejercicio_activo = False
+                st.session_state.ejercicio_completado = True
                 st.balloons()
                 break
 
             if tiempo_actual >= duracion_maxima:
                 st.session_state.puntos += puntos_ganados
+                st.session_state.puntos_ganados_ultimo = puntos_ganados
+                st.session_state.ejercicio_activo = False
+                st.session_state.ejercicio_completado = True
                 st.warning("Tiempo máximo alcanzado.")
                 st.info(f"Ganaste +{puntos_ganados} puntos.")
                 break
 
             if detener:
+                st.session_state.ejercicio_activo = False
                 st.session_state.puntos += puntos_ganados
+                st.session_state.puntos_ganados_ultimo = puntos_ganados
+                st.session_state.ejercicio_completado = True
                 st.warning("Ejercicio detenido.")
                 st.info(f"Ganaste +{puntos_ganados} puntos.")
                 break
@@ -238,14 +319,19 @@ def pantalla_ejercicio():
 
     cap.release()
 
+    if st.session_state.ejercicio_completado:
+        st.rerun()
+
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("Volver al mapa de niveles", use_container_width=True):
+        if st.button("Volver al mapa de niveles", use_container_width=True, key="btn_volver_mapa"):
+            st.session_state.ejercicio_activo = False
             st.session_state.pantalla = "mapa"
             st.rerun()
 
     with col2:
-        if st.button("Volver al dashboard", use_container_width=True):
+        if st.button("Volver al dashboard", use_container_width=True, key="btn_volver_dashboard"):
+            st.session_state.ejercicio_activo = False
             st.session_state.pantalla = "dashboard"
             st.rerun()
