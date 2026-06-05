@@ -27,7 +27,7 @@ def calcular_angulo(a, b, c):
     return angulo
 
 
-def mostrar_video_loop(ruta_video):
+def mostrar_video_loop(ruta_video, ancho="85%"):
     if not os.path.exists(ruta_video):
         st.warning("No se encontró la animación del ejercicio.")
         return
@@ -117,7 +117,7 @@ def pantalla_ejercicio():
 
     st.info("Ubícate frente a la cámara. El sistema analizará tu movimiento automáticamente.")
 
-    col_camara, col_derecha = st.columns([2.2, 1])
+    col_camara, col_derecha = st.columns([1.35, 1])
 
     with col_camara:
         st.subheader("Cámara del paciente")
@@ -181,6 +181,7 @@ def pantalla_ejercicio():
                 st.error("No se pudo leer la cámara.")
                 break
 
+            frame = cv2.resize(frame, (520, 390))
             frame = cv2.flip(frame, 1)
             height, width, _ = frame.shape
 
@@ -271,23 +272,23 @@ def pantalla_ejercicio():
                 max_texto = "-"
 
             with resultados_placeholder.container():
-                st.metric("Repeticiones", f"{repeticiones}/{total_repeticiones}")
+                st.markdown("### Resultados")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Reps", f"{repeticiones}/{total_repeticiones}")
+                with col2:
+                    st.metric("Puntos", puntos_ganados)
+
                 st.progress(progreso)
 
-                st.metric("Ángulo actual", f"{round(angulo_actual, 2)}°")
-                st.write(f"**Estado:** {estado_movimiento}")
-                st.write(f"**Retroalimentación:** {mensaje}")
+                col3, col4 = st.columns(2)
+                with col3:
+                    st.metric("Ángulo", f"{round(angulo_actual, 1)}°")
+                with col4:
+                    st.metric("Tiempo", f"{tiempo_actual}s")
 
-                st.divider()
-
-                st.write(f"**Ángulo mínimo:** {min_texto}°")
-                st.write(f"**Ángulo máximo:** {max_texto}°")
-                st.write(f"**Promedio:** {promedio}°")
-
-                st.divider()
-
-                st.metric("Puntos ganados", puntos_ganados)
-                st.write(f"**Tiempo:** {tiempo_actual} segundos")
+                st.caption(f"Estado: {estado_movimiento}")
+                st.caption(f"Retroalimentación: {mensaje}")
 
             if repeticiones >= total_repeticiones:
                 st.session_state.puntos += puntos_ganados
