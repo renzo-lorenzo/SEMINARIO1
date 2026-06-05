@@ -29,7 +29,7 @@ Thumbs.db
 .idea/
 
 # Videos pesados
-*.mp4
+# *.mp4
 *.mov
 *.avi
 *.mkv
