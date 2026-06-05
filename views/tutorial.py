@@ -12,7 +12,7 @@ def obtener_video_tutorial(ejercicio_id):
 
     return videos_tutoriales.get(
         ejercicio_id,
-        "imagenes/tutorial_extension_rodilla.mp4"
+        "imagenes/tutorial_flexion.mp4"
     )
 
 
