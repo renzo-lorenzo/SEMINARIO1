@@ -1,30 +1,21 @@
+from utils.evaluacion_movimiento import (
+    calcular_angulo,
+    obtener_puntos_pierna,
+    dibujar_solo_pierna,
+    inicializar_estado_evaluacion,
+    evaluar_movimiento
+)
+
+
 import streamlit as st
 import cv2
 import mediapipe as mp
-import numpy as np
 import time
 import os
 import base64
 
 
 mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-mp_styles = mp.solutions.drawing_styles
-
-
-def calcular_angulo(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
-
-    ba = a - b
-    bc = c - b
-
-    coseno = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    coseno = np.clip(coseno, -1.0, 1.0)
-
-    angulo = np.degrees(np.arccos(coseno))
-    return angulo
 
 
 def mostrar_video_loop(ruta_video, ancho="85%"):
@@ -154,7 +145,8 @@ def pantalla_ejercicio():
     total_repeticiones = 10
     puntos_ganados = 0
 
-    estado_movimiento = "extendido"
+    estado_eval = inicializar_estado_evaluacion()
+    estado_movimiento = "inicio"
     angulo_actual = 0
     angulo_minimo = 999
     angulo_maximo = 0
@@ -188,68 +180,64 @@ def pantalla_ejercicio():
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = pose.process(rgb)
 
-            mensaje = "Colócate de lado y muestra cuerpo completo"
+            mensaje = "Colócate de lado y muestra la pierna completa"
 
             if results.pose_landmarks:
                 landmarks = results.pose_landmarks.landmark
 
-                # Muestra todo el cuerpo con MediaPipe
-                mp_drawing.draw_landmarks(
-                    frame,
-                    results.pose_landmarks,
-                    mp_pose.POSE_CONNECTIONS,
-                    landmark_drawing_spec=mp_styles.get_default_pose_landmarks_style()
+                puntos_pierna = obtener_puntos_pierna(
+                    landmarks=landmarks,
+                    width=width,
+                    height=height,
+                    lado="RIGHT"
                 )
 
-                # Para el análisis solo usamos cadera, rodilla y tobillo
-                cadera = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-                rodilla = landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value]
-                tobillo = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                if puntos_pierna is None:
+                    puntos_pierna = obtener_puntos_pierna(
+                        landmarks=landmarks,
+                        width=width,
+                        height=height,
+                        lado="LEFT"
+                    )
 
-                punto_cadera = (int(cadera.x * width), int(cadera.y * height))
-                punto_rodilla = (int(rodilla.x * width), int(rodilla.y * height))
-                punto_tobillo = (int(tobillo.x * width), int(tobillo.y * height))
-
-                angulo_actual = calcular_angulo(
-                    punto_cadera,
-                    punto_rodilla,
-                    punto_tobillo
-                )
-
-                angulos.append(angulo_actual)
-                angulo_minimo = min(angulo_minimo, angulo_actual)
-                angulo_maximo = max(angulo_maximo, angulo_actual)
-
-                # Resalta la pierna analizada
-                cv2.line(frame, punto_cadera, punto_rodilla, (255, 255, 255), 4)
-                cv2.line(frame, punto_rodilla, punto_tobillo, (255, 255, 255), 4)
-
-                cv2.circle(frame, punto_cadera, 8, (0, 0, 255), -1)
-                cv2.circle(frame, punto_rodilla, 10, (0, 255, 255), -1)
-                cv2.circle(frame, punto_tobillo, 8, (0, 0, 255), -1)
-
-                cv2.putText(
-                    frame,
-                    f"{int(angulo_actual)} grados",
-                    (punto_rodilla[0] + 20, punto_rodilla[1] + 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 255),
-                    2
-                )
-
-                if angulo_actual < 120 and estado_movimiento == "extendido":
-                    estado_movimiento = "flexionado"
-                    mensaje = "Buena flexión, ahora vuelve lentamente"
-
-                elif angulo_actual > 150 and estado_movimiento == "flexionado":
-                    estado_movimiento = "extendido"
-                    repeticiones += 1
-                    puntos_ganados += 10
-                    mensaje = "Repetición válida"
-
+                if puntos_pierna is None:
+                    mensaje = "No se detecta correctamente la pierna. Ubícate de lado frente a la cámara."
                 else:
-                    mensaje = "Sigue el movimiento de forma controlada"
+                    punto_cadera = puntos_pierna["cadera"]
+                    punto_rodilla = puntos_pierna["rodilla"]
+                    punto_tobillo = puntos_pierna["tobillo"]
+
+                    angulo_actual = calcular_angulo(
+                        punto_cadera,
+                        punto_rodilla,
+                        punto_tobillo
+                    )
+
+                    if angulo_actual is not None:
+                        angulos.append(angulo_actual)
+                        angulo_minimo = min(angulo_minimo, angulo_actual)
+                        angulo_maximo = max(angulo_maximo, angulo_actual)
+
+                    dibujar_solo_pierna(
+                        frame=frame,
+                        puntos=puntos_pierna,
+                        angulo_actual=angulo_actual
+                    )
+
+                    rep_valida, estado_eval, mensaje = evaluar_movimiento(
+                        ejercicio=ejercicio,
+                        angulo=angulo_actual,
+                        puntos=puntos_pierna,
+                        estado_eval=estado_eval
+                    )
+
+                    estado_movimiento = estado_eval["fase"]
+
+                    if rep_valida:
+                        repeticiones += 1
+                        puntos_ganados += 10
+            else:
+                mensaje = "No se detectó postura. Colócate de lado y muestra la pierna completa."
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -283,9 +271,12 @@ def pantalla_ejercicio():
 
                 col3, col4 = st.columns(2)
                 with col3:
-                    st.metric("Ángulo", f"{round(angulo_actual, 1)}°")
+                    if angulo_actual is not None:
+                        angulo_texto = f"{round(angulo_actual, 1)}°"
+                    else:
+                        angulo_texto = "-"
                 with col4:
-                    st.metric("Tiempo", f"{tiempo_actual}s")
+                    st.metric("Ángulo", angulo_texto)
 
                 st.caption(f"Estado: {estado_movimiento}")
                 st.caption(f"Retroalimentación: {mensaje}")
