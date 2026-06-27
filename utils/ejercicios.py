@@ -1,6 +1,5 @@
 def obtener_ejercicios():
     return [
-        # NIVEL 1
         {
             "id": 1,
             "nombre": "Extensión de rodilla sentado",
@@ -28,8 +27,6 @@ def obtener_ejercicios():
             "objetivo": "Trabajar flexión controlada y estabilidad inicial",
             "tipo_evaluacion": "mini_sentadilla",
         },
-
-        # NIVEL 2
         {
             "id": 4,
             "nombre": "Puente glúteo",
@@ -57,8 +54,6 @@ def obtener_ejercicios():
             "objetivo": "Mejorar estabilidad lateral y control de cadera",
             "tipo_evaluacion": "abduccion_cadera",
         },
-
-        # NIVEL 3
         {
             "id": 7,
             "nombre": "Sit to Stand",
@@ -94,7 +89,7 @@ def obtener_nombre_nivel(nivel):
     nombres = {
         1: "Nivel 1: Movilidad inicial",
         2: "Nivel 2: Control y estabilidad",
-        3: "Nivel 3: Fuerza funcional"
+        3: "Nivel 3: Fuerza funcional",
     }
     return nombres.get(nivel, "Nivel desconocido")
 
