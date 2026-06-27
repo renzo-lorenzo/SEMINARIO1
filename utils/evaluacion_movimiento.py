@@ -91,6 +91,8 @@ def inicializar_estado_evaluacion():
         "fase": "inicio",
         "base_tobillo_y": None,
         "base_tobillo_x": None,
+        "base_cadera_y": None,
+        "base_rodilla_y": None,
         "ultimo_tick": time.time(),
         "tiempo_estable": 0,
     }
@@ -182,20 +184,6 @@ def evaluar_elevacion_pierna_recta(angulo, puntos, estado_eval):
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_zancada_asistida(angulo, estado_eval):
-    """
-    Ejercicio: Zancada asistida.
-    Movimiento esperado:
-    flexión controlada de rodilla y retorno a extensión.
-    """
-    return evaluar_sentadilla(
-        angulo=angulo,
-        estado_eval=estado_eval,
-        umbral_bajada=125,
-        umbral_subida=150
-    )
-
-
 def evaluar_step_up(angulo, puntos, estado_eval):
     """
     Ejercicio: Step-up bajo.
@@ -227,41 +215,46 @@ def evaluar_step_up(angulo, puntos, estado_eval):
         mensaje = "Sube y baja de forma controlada"
 
     return rep_valida, estado_eval, mensaje
+    
 
-
-def evaluar_equilibrio(angulo, puntos, estado_eval):
+def evaluar_puente_gluteo(angulo, puntos, estado_eval):
     """
-    Ejercicio: Equilibrio con apoyo.
-    No se evalúa por repeticiones clásicas.
-    Se asigna una unidad de progreso por mantener estabilidad.
+    Ejercicio: Puente glúteo.
+    Movimiento esperado:
+    pelvis baja -> pelvis sube -> pelvis vuelve a bajar.
+    Se usa la altura de la cadera como referencia.
     """
     rep_valida = False
 
-    if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la pierna"
+    cadera_y = puntos["cadera_norm"][1]
 
-    ahora = time.time()
+    if estado_eval.get("base_cadera_y") is None:
+        estado_eval["base_cadera_y"] = cadera_y
 
-    rodilla_estable = angulo > 145
+    diferencia_altura = estado_eval["base_cadera_y"] - cadera_y
 
-    if rodilla_estable:
-        if ahora - estado_eval["ultimo_tick"] >= 2:
-            rep_valida = True
-            estado_eval["ultimo_tick"] = ahora
-            mensaje = "Postura estable mantenida"
-        else:
-            mensaje = "Mantén la postura estable"
+    pelvis_arriba = diferencia_altura > 0.08
+    pelvis_abajo = diferencia_altura < 0.03
+
+    if pelvis_arriba and estado_eval["fase"] in ["inicio", "abajo"]:
+        estado_eval["fase"] = "arriba"
+        mensaje = "Puente detectado, baja lentamente"
+    elif pelvis_abajo and estado_eval["fase"] == "arriba":
+        rep_valida = True
+        estado_eval["fase"] = "abajo"
+        mensaje = "Repetición válida: puente completo"
     else:
-        estado_eval["ultimo_tick"] = ahora
-        mensaje = "Estira y estabiliza la pierna"
+        mensaje = "Eleva la pelvis y vuelve con control"
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_desplazamiento_lateral(angulo, puntos, estado_eval):
+def evaluar_abduccion_cadera(angulo, puntos, estado_eval):
     """
-    Ejercicio: Desplazamiento lateral suave.
-    Se valida por cambio horizontal del tobillo.
+    Ejercicio: Abducción de cadera de pie.
+    Movimiento esperado:
+    pierna al centro -> pierna se separa lateralmente -> vuelve al centro.
+    Se usa el desplazamiento horizontal del tobillo.
     """
     rep_valida = False
 
@@ -272,18 +265,78 @@ def evaluar_desplazamiento_lateral(angulo, puntos, estado_eval):
 
     desplazamiento = tobillo_x - estado_eval["base_tobillo_x"]
 
-    fue_lateral = abs(desplazamiento) > 0.08
-    volvio_centro = abs(desplazamiento) < 0.03
+    pierna_abierta = abs(desplazamiento) > 0.08
+    pierna_centro = abs(desplazamiento) < 0.03
 
-    if fue_lateral and estado_eval["fase"] in ["inicio", "centro"]:
-        estado_eval["fase"] = "lateral"
-        mensaje = "Desplazamiento lateral detectado, vuelve al centro"
-    elif volvio_centro and estado_eval["fase"] == "lateral":
+    if pierna_abierta and estado_eval["fase"] in ["inicio", "centro"]:
+        estado_eval["fase"] = "abierta"
+        mensaje = "Pierna separada, vuelve lentamente al centro"
+    elif pierna_centro and estado_eval["fase"] == "abierta":
         rep_valida = True
         estado_eval["fase"] = "centro"
-        mensaje = "Repetición válida: desplazamiento completo"
+        mensaje = "Repetición válida: abducción completa"
     else:
-        mensaje = "Realiza el desplazamiento lateral con control"
+        mensaje = "Separa la pierna lateralmente y vuelve al centro"
+
+    return rep_valida, estado_eval, mensaje
+
+
+def evaluar_sit_to_stand(angulo, estado_eval):
+    """
+    Ejercicio: Sit to Stand.
+    Movimiento esperado:
+    sentado/flexionado -> de pie/extendido -> vuelve a sentado.
+    Se valida con el ángulo de rodilla.
+    """
+    rep_valida = False
+
+    if angulo is None:
+        return rep_valida, estado_eval, "No se detecta correctamente la rodilla"
+
+    sentado = angulo < 120
+    de_pie = angulo > 155
+
+    if de_pie and estado_eval["fase"] in ["inicio", "sentado"]:
+        estado_eval["fase"] = "de_pie"
+        mensaje = "De pie detectado, vuelve a sentarte con control"
+    elif sentado and estado_eval["fase"] == "de_pie":
+        rep_valida = True
+        estado_eval["fase"] = "sentado"
+        mensaje = "Repetición válida: sentado y de pie completo"
+    else:
+        mensaje = "Levántate y siéntate de forma controlada"
+
+    return rep_valida, estado_eval, mensaje
+
+
+def evaluar_marcha_sitio(angulo, puntos, estado_eval):
+    """
+    Ejercicio: Elevación alternada de rodillas / Marcha en el sitio.
+    Movimiento esperado:
+    rodilla baja -> rodilla sube -> rodilla baja.
+    Se usa la altura de la rodilla.
+    """
+    rep_valida = False
+
+    rodilla_y = puntos["rodilla_norm"][1]
+
+    if estado_eval.get("base_rodilla_y") is None:
+        estado_eval["base_rodilla_y"] = rodilla_y
+
+    diferencia_altura = estado_eval["base_rodilla_y"] - rodilla_y
+
+    rodilla_arriba = diferencia_altura > 0.08
+    rodilla_abajo = diferencia_altura < 0.03
+
+    if rodilla_arriba and estado_eval["fase"] in ["inicio", "abajo"]:
+        estado_eval["fase"] = "arriba"
+        mensaje = "Rodilla elevada, baja con control"
+    elif rodilla_abajo and estado_eval["fase"] == "arriba":
+        rep_valida = True
+        estado_eval["fase"] = "abajo"
+        mensaje = "Repetición válida: marcha en el sitio"
+    else:
+        mensaje = "Eleva una rodilla y vuelve a la posición inicial"
 
     return rep_valida, estado_eval, mensaje
 
@@ -300,22 +353,19 @@ def evaluar_movimiento(ejercicio, angulo, puntos, estado_eval):
     if tipo == "mini_sentadilla":
         return evaluar_sentadilla(angulo, estado_eval, umbral_bajada=135, umbral_subida=150)
 
-    if tipo == "sentadilla_parcial":
-        return evaluar_sentadilla(angulo, estado_eval, umbral_bajada=125, umbral_subida=150)
+    if tipo == "puente_gluteo":
+        return evaluar_puente_gluteo(angulo, puntos, estado_eval)
 
-    if tipo == "sentadilla_controlada":
-        return evaluar_sentadilla(angulo, estado_eval, umbral_bajada=115, umbral_subida=150)
-
-    if tipo == "zancada_asistida":
-        return evaluar_zancada_asistida(angulo, estado_eval)
-
-    if tipo == "equilibrio":
-        return evaluar_equilibrio(angulo, puntos, estado_eval)
-
-    if tipo == "step_up":
+    if tipo == "step_basico":
         return evaluar_step_up(angulo, puntos, estado_eval)
 
-    if tipo == "desplazamiento_lateral":
-        return evaluar_desplazamiento_lateral(angulo, puntos, estado_eval)
+    if tipo == "abduccion_cadera":
+        return evaluar_abduccion_cadera(angulo, puntos, estado_eval)
+
+    if tipo == "sit_to_stand":
+        return evaluar_sit_to_stand(angulo, estado_eval)
+
+    if tipo == "marcha_sitio":
+        return evaluar_marcha_sitio(angulo, puntos, estado_eval)
 
     return evaluar_extension_rodilla(angulo, estado_eval)
