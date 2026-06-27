@@ -184,11 +184,7 @@ def evaluar_elevacion_pierna_recta(angulo, puntos, estado_eval):
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_step_up(angulo, puntos, estado_eval):
-    """
-    Ejercicio: Step-up bajo.
-    Se combina flexión/extensión de rodilla con elevación del tobillo.
-    """
+def evaluar_step_basico(angulo, puntos, estado_eval):
     rep_valida = False
 
     if angulo is None:
@@ -215,7 +211,7 @@ def evaluar_step_up(angulo, puntos, estado_eval):
         mensaje = "Sube y baja de forma controlada"
 
     return rep_valida, estado_eval, mensaje
-    
+
 
 def evaluar_puente_gluteo(angulo, puntos, estado_eval):
     """
@@ -357,7 +353,7 @@ def evaluar_movimiento(ejercicio, angulo, puntos, estado_eval):
         return evaluar_puente_gluteo(angulo, puntos, estado_eval)
 
     if tipo == "step_basico":
-        return evaluar_step_up(angulo, puntos, estado_eval)
+        return evaluar_step_basico(angulo, puntos, estado_eval)
 
     if tipo == "abduccion_cadera":
         return evaluar_abduccion_cadera(angulo, puntos, estado_eval)
