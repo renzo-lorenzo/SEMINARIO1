@@ -52,6 +52,10 @@ def pantalla_tutorial():
         2: "imagenes/tutorial_elevacion_pierna.mp4",
         3: "imagenes/tutorial_mini_sentadilla.mp4",
         4: "imagenes/tutorial_puente_gluteo.mp4",
+        5: "imagenes/tutorial_step_basico.mp4",
+        6: "imagenes/tutorial_abduccion_cadera.mp4",
+        7: "imagenes/tutorial_sit_to_stand.mp4",
+        8: "imagenes/tutorial_marcha_sitio.mp4",
     }
 
     ruta_video = videos_tutorial.get(
