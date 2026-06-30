@@ -122,14 +122,15 @@ def pantalla_ejercicio():
         resultados_placeholder = st.empty()
 
     videos_animacion = {
-        1: "imagenes/tutorial_flexion.mp4",
-        2: "imagenes/tutorial_elevacion_pierna.mp4",
-        3: "imagenes/tutorial_mini_sentadilla.mp4",
+        1: "imagenes/tutorial_extension_rodilla.mp4",
+    2: "imagenes/tutorial_elevacion_pierna.mp4",
+    3: "imagenes/tutorial_mini_sentadilla.mp4",
+    4: "imagenes/tutorial_puente_gluteo.mp4",
     }
 
     ruta_animacion = videos_animacion.get(
         ejercicio["id"],
-        "imagenes/tutorial_flexion.mp4"
+        "imagenes/tutorial_extension_rodilla.mp4"
     )
 
     with animacion_placeholder.container():

@@ -48,14 +48,15 @@ def pantalla_tutorial():
     st.info("La cámara se activará automáticamente cuando termine el tutorial.")
 
     videos_tutorial = {
-        1: "imagenes/tutorial_flexion.mp4",
+        1: "imagenes/tutorial_extension_rodilla.mp4",
         2: "imagenes/tutorial_elevacion_pierna.mp4",
         3: "imagenes/tutorial_mini_sentadilla.mp4",
+        4: "imagenes/tutorial_puente_gluteo.mp4",
     }
 
     ruta_video = videos_tutorial.get(
         ejercicio["id"],
-        "imagenes/tutorial_flexion.mp4"
+        "imagenes/tutorial_extension_rodilla.mp4"
     )
 
     mostrar_video_autoplay(ruta_video, ancho="70%")
