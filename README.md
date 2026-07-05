@@ -1,6 +1,6 @@
 REQUISITOS:
 - Python 3.11 (SOLO ESE ME FUNCIONA A MI)
-- MediaPipe 0.10.14 (Ese calcula postura)
+- MediaPipe 0.10.35 (Ese calcula postura)
 - OpenCV
 - Streamlit
 
