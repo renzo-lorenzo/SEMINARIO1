@@ -1,39 +1,41 @@
 import streamlit as st
-from utils.ejercicios import puntos_iniciales_por_experiencia
+
+from components.participant_search import mostrar_buscador
+from components.participant_list import mostrar_lista_participantes
+from components.participant_form import mostrar_formulario_participante
+
 
 def pantalla_login():
-    st.markdown('<div class="title">KneePlay Rehab</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="subtitle">Sistema gamificado de apoyo para ejercicios domiciliarios de rodilla</div>',
-        unsafe_allow_html=True
-    )
 
-    col1, col2, col3 = st.columns([1, 1.3, 1])
+    st.title("👋 Bienvenido")
+    st.write("Seleccione el participante que realizará los ejercicios.")
 
-    with col2:
+    st.divider()
 
-        st.subheader("Inicio de sesión")
-        st.write("Ingresa tus datos para iniciar tu rutina guiada.")
+    # ==========================================
+    # BUSCADOR
+    # ==========================================
 
-        nombre = st.text_input("Nombre")
-        edad = st.number_input("Edad", min_value=18, max_value=100, value=45)
-        dolor = st.slider("Nivel de dolor actual en la rodilla", 0, 10, 3)
-        experiencia = st.selectbox(
-            "Nivel de experiencia con ejercicios",
-            ["Principiante", "Intermedio", "Avanzado"]
-        )
+    busqueda = mostrar_buscador()
 
-        iniciar = st.button("Iniciar mi rehabilitación", use_container_width=True)
+    # ==========================================
+    # COLUMNAS
+    # ==========================================
 
-        if iniciar:
-            if nombre.strip() == "":
-                st.warning("Por favor, ingresa el nombre del paciente.")
-            else:
-                st.session_state.logged_in = True
-                st.session_state.nombre = nombre
-                st.session_state.edad = edad
-                st.session_state.dolor = dolor
-                st.session_state.experiencia = experiencia
-                st.session_state.puntos = puntos_iniciales_por_experiencia(experiencia)
-                st.session_state.nivel = 1
-                st.rerun()
+    col_lista, espacio, col_formulario = st.columns([2.3, 0.15, 1.5])
+
+    # ==========================================
+    # LISTA
+    # ==========================================
+
+    with col_lista:
+
+        mostrar_lista_participantes(busqueda)
+
+    # ==========================================
+    # FORMULARIO
+    # ==========================================
+
+    with col_formulario:
+
+        mostrar_formulario_participante()
