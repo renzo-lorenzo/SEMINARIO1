@@ -34,6 +34,7 @@ def mostrar_boton_comenzar():
         type="primary"
     ):
 
+        # Ir al mapa de ejercicios
         st.session_state.pantalla = "mapa"
 
         st.rerun()

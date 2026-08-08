@@ -8,6 +8,7 @@ def obtener_ejercicios():
             "descripcion": "Sentado en una silla, estira lentamente la pierna hacia adelante hasta que la rodilla quede casi recta y vuelve a la posición inicial.",
             "objetivo": "Mejorar movilidad y extensión de rodilla",
             "tipo_evaluacion": "extension_rodilla",
+            "video": "imagenes/tutorial_extension_rodilla.mp4",
         },
         {
             "id": 2,
@@ -17,6 +18,7 @@ def obtener_ejercicios():
             "descripcion": "Eleva la pierna manteniendo la rodilla extendida y vuelve lentamente a la posición inicial.",
             "objetivo": "Fortalecer cuádriceps y control de pierna",
             "tipo_evaluacion": "elevacion_pierna_recta",
+            "video": "imagenes/tutorial_elevacion_pierna.mp4",
         },
         {
             "id": 3,
@@ -26,6 +28,7 @@ def obtener_ejercicios():
             "descripcion": "Realiza una flexión parcial de rodilla y vuelve a la posición inicial de forma controlada.",
             "objetivo": "Trabajar flexión controlada y estabilidad inicial",
             "tipo_evaluacion": "mini_sentadilla",
+            "video": "imagenes/tutorial_mini_sentadilla.mp4",
         },
         {
             "id": 4,
@@ -35,6 +38,7 @@ def obtener_ejercicios():
             "descripcion": "Acostado boca arriba, eleva la pelvis de forma controlada y vuelve lentamente a la posición inicial.",
             "objetivo": "Fortalecer glúteos y musculatura de soporte",
             "tipo_evaluacion": "puente_gluteo",
+            "video": "imagenes/tutorial_puente_gluteo.mp4",
         },
         {
             "id": 5,
@@ -44,6 +48,7 @@ def obtener_ejercicios():
             "descripcion": "Sube a una superficie baja de forma controlada y vuelve a bajar manteniendo estabilidad.",
             "objetivo": "Mejorar fuerza funcional y control de rodilla",
             "tipo_evaluacion": "step_basico",
+            "video": "imagenes/tutorial_step_basico.mp4",
         },
         {
             "id": 6,
@@ -53,6 +58,7 @@ def obtener_ejercicios():
             "descripcion": "De pie y con apoyo, separa lateralmente la pierna y vuelve lentamente a la posición inicial.",
             "objetivo": "Mejorar estabilidad lateral y control de cadera",
             "tipo_evaluacion": "abduccion_cadera",
+            "video": "imagenes/tutorial_abduccion_cadera.mp4",
         },
         {
             "id": 7,
@@ -62,6 +68,7 @@ def obtener_ejercicios():
             "descripcion": "Desde una silla, levántate hasta quedar de pie y vuelve a sentarte de forma controlada.",
             "objetivo": "Fortalecer patrón funcional de levantarse y sentarse",
             "tipo_evaluacion": "sit_to_stand",
+            "video": "imagenes/tutorial_sit_to_stand.mp4",
         },
         {
             "id": 8,
@@ -71,6 +78,7 @@ def obtener_ejercicios():
             "descripcion": "Realiza una marcha en el sitio elevando una rodilla a la vez de forma alternada y controlada.",
             "objetivo": "Mejorar coordinación, movilidad y control funcional",
             "tipo_evaluacion": "marcha_sitio",
+            "video": "imagenes/tutorial_marcha_sitio.mp4",
         },
     ]
 

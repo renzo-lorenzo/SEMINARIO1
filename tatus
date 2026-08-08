@@ -1,0 +1,11 @@
+* [33m830624d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m CAMBIO DE INICIO DE SESION Y DASHBOARDS
+[31m|[m * [33mf2b0f63[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Update MediaPipe version in README
+[31m|[m[31m/[m  
+* [33m62ef5c2[m VIDEOS: todos agregados en HD
+* [33m06b4501[m Agrega video de puente gluteo
+* [33mc0915b4[m Comprime video de puente gluteo
+* [33m55d1176[m CORRECION: Video correcto en el 1er ejercicio
+* [33m0c90c48[m correccion de nombres
+* [33ma897db9[m correccion mapa de niveles, ahora son 8
+* [33mffffacd[m Nueva lista de ejercicios creandose
+* [33mad63275[m Correcion de calculo de cada ejercicio
