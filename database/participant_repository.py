@@ -1,6 +1,10 @@
 from database.connection import get_connection
 
 
+# ==================================================
+# PARTICIPANTES
+# ==================================================
+
 def get_all_participants():
 
     conn = get_connection()
@@ -58,7 +62,8 @@ def initialize_database():
 
             age INTEGER NOT NULL,
 
-            registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            registration_date TIMESTAMP
+                DEFAULT CURRENT_TIMESTAMP,
 
             active INTEGER DEFAULT 1
 
@@ -76,9 +81,51 @@ def initialize_database():
 
             participant_id INTEGER NOT NULL,
 
-            session_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            exercise_id INTEGER,
+
+            session_date TIMESTAMP
+                DEFAULT CURRENT_TIMESTAMP,
+
+            repetitions_completed INTEGER
+                DEFAULT 0,
+
+            target_repetitions INTEGER
+                DEFAULT 10,
+
+            duration_seconds INTEGER
+                DEFAULT 0,
+
+            points_earned INTEGER
+                DEFAULT 0,
 
             status TEXT DEFAULT 'active',
+
+            FOREIGN KEY (participant_id)
+                REFERENCES participants(id)
+
+        )
+    """)
+
+    # ==========================================
+    # TABLA DE CONFIGURACIÓN DE EJERCICIOS
+    # ==========================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS participant_exercises (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            participant_id INTEGER NOT NULL,
+
+            exercise_id INTEGER NOT NULL,
+
+            target_repetitions INTEGER NOT NULL
+                DEFAULT 10,
+
+            UNIQUE (
+                participant_id,
+                exercise_id
+            ),
 
             FOREIGN KEY (participant_id)
                 REFERENCES participants(id)
@@ -90,25 +137,75 @@ def initialize_database():
     # COMPATIBILIDAD CON BASES EXISTENTES
     # ==========================================
 
-    # Si la tabla sessions ya existía antes de agregar
-    # la columna status, la agregamos automáticamente.
+    # ------------------------------------------
+    # SESIONES
+    # ------------------------------------------
 
-    cursor.execute("PRAGMA table_info(sessions)")
+    cursor.execute(
+        "PRAGMA table_info(sessions)"
+    )
 
-    columns = [column[1] for column in cursor.fetchall()]
+    session_columns = [
+        column[1]
+        for column in cursor.fetchall()
+    ]
 
-    if "status" not in columns:
+    if "status" not in session_columns:
 
         cursor.execute("""
             ALTER TABLE sessions
-            ADD COLUMN status TEXT DEFAULT 'active'
+            ADD COLUMN status TEXT
+            DEFAULT 'active'
+        """)
+
+    if "exercise_id" not in session_columns:
+
+        cursor.execute("""
+            ALTER TABLE sessions
+            ADD COLUMN exercise_id INTEGER
+        """)
+
+    if "repetitions_completed" not in session_columns:
+
+        cursor.execute("""
+            ALTER TABLE sessions
+            ADD COLUMN repetitions_completed INTEGER
+            DEFAULT 0
+        """)
+
+    if "target_repetitions" not in session_columns:
+
+        cursor.execute("""
+            ALTER TABLE sessions
+            ADD COLUMN target_repetitions INTEGER
+            DEFAULT 10
+        """)
+
+    if "duration_seconds" not in session_columns:
+
+        cursor.execute("""
+            ALTER TABLE sessions
+            ADD COLUMN duration_seconds INTEGER
+            DEFAULT 0
+        """)
+
+    if "points_earned" not in session_columns:
+
+        cursor.execute("""
+            ALTER TABLE sessions
+            ADD COLUMN points_earned INTEGER
+            DEFAULT 0
         """)
 
     conn.commit()
     conn.close()
 
 
-def create_participant(first_name, last_name, age):
+def create_participant(
+    first_name,
+    last_name,
+    age
+):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -125,7 +222,11 @@ def create_participant(first_name, last_name, age):
         (
             ?, ?, ?
         )
-    """, (first_name, last_name, age))
+    """, (
+        first_name,
+        last_name,
+        age
+    ))
 
     conn.commit()
     conn.close()
@@ -147,9 +248,138 @@ def delete_participant(participant_id):
 
 
 # ==================================================
-# SESIONES
+# CONFIGURACIÓN DE REPETICIONES POR PARTICIPANTE
 # ==================================================
 
+def get_exercise_repetitions(
+    participant_id,
+    exercise_id,
+    default_repetitions=10
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT target_repetitions
+        FROM participant_exercises
+        WHERE participant_id = ?
+        AND exercise_id = ?
+    """, (
+        participant_id,
+        exercise_id
+    ))
+
+    result = cursor.fetchone()
+
+    # ==========================================
+    # SI YA EXISTE CONFIGURACIÓN
+    # ==========================================
+
+    if result is not None:
+
+        repetitions = result[0]
+
+        conn.close()
+
+        return repetitions
+
+    # ==========================================
+    # SI NO EXISTE
+    # CREAR CONFIGURACIÓN POR DEFECTO
+    # ==========================================
+
+    cursor.execute("""
+        INSERT INTO participant_exercises
+        (
+            participant_id,
+            exercise_id,
+            target_repetitions
+        )
+
+        VALUES
+        (
+            ?, ?, ?
+        )
+    """, (
+        participant_id,
+        exercise_id,
+        default_repetitions
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return default_repetitions
+
+
+def set_exercise_repetitions(
+    participant_id,
+    exercise_id,
+    repetitions
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO participant_exercises
+        (
+            participant_id,
+            exercise_id,
+            target_repetitions
+        )
+
+        VALUES
+        (
+            ?, ?, ?
+        )
+
+        ON CONFLICT (
+            participant_id,
+            exercise_id
+        )
+
+        DO UPDATE SET
+            target_repetitions =
+                excluded.target_repetitions
+    """, (
+        participant_id,
+        exercise_id,
+        repetitions
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def get_all_exercise_repetitions(
+    participant_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            exercise_id,
+            target_repetitions
+
+        FROM participant_exercises
+
+        WHERE participant_id = ?
+    """, (participant_id,))
+
+    repetitions = cursor.fetchall()
+
+    conn.close()
+
+    return repetitions
+
+
+# ==================================================
+# SESIONES
+# ==================================================
 
 def get_session_count(participant_id):
 
@@ -170,7 +400,14 @@ def get_session_count(participant_id):
     return result[0]
 
 
-def register_session(participant_id):
+def register_session(
+    participant_id,
+    exercise_id=None,
+    repetitions_completed=0,
+    target_repetitions=10,
+    duration_seconds=0,
+    points_earned=0
+):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -179,15 +416,26 @@ def register_session(participant_id):
         INSERT INTO sessions
         (
             participant_id,
+            exercise_id,
+            repetitions_completed,
+            target_repetitions,
+            duration_seconds,
+            points_earned,
             status
         )
 
         VALUES
         (
-            ?,
-            'active'
+            ?, ?, ?, ?, ?, ?, 'active'
         )
-    """, (participant_id,))
+    """, (
+        participant_id,
+        exercise_id,
+        repetitions_completed,
+        target_repetitions,
+        duration_seconds,
+        points_earned
+    ))
 
     conn.commit()
     conn.close()
@@ -228,6 +476,7 @@ def cancel_last_session(participant_id):
 
     return True
 
+
 def get_session_history(participant_id):
 
     conn = get_connection()
@@ -236,11 +485,21 @@ def get_session_history(participant_id):
     cursor.execute("""
         SELECT
             id,
+            exercise_id,
             session_date,
+            repetitions_completed,
+            target_repetitions,
+            duration_seconds,
+            points_earned,
             status
+
         FROM sessions
+
         WHERE participant_id = ?
-        ORDER BY session_date DESC, id DESC
+
+        ORDER BY
+            session_date DESC,
+            id DESC
     """, (participant_id,))
 
     sessions = cursor.fetchall()
@@ -248,6 +507,7 @@ def get_session_history(participant_id):
     conn.close()
 
     return sessions
+
 
 def delete_session(session_id):
 
