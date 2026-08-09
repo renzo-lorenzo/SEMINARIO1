@@ -18,18 +18,27 @@ from database.participant_repository import (
 
 def convertir_hora_peru(session_date):
 
-    fecha = datetime.fromisoformat(str(session_date))
+    if session_date is None:
+        return None
 
-    # SQLite CURRENT_TIMESTAMP guarda la fecha en UTC
-    fecha_utc = fecha.replace(tzinfo=timezone.utc)
+    try:
 
-    # Convertir a hora de Perú
-    fecha_peru = fecha_utc.astimezone(
-        ZoneInfo("America/Lima")
-    )
+        fecha = datetime.fromisoformat(
+            str(session_date)
+        )
 
-    return fecha_peru
+        if fecha.tzinfo is None:
+            fecha = fecha.replace(
+                tzinfo=ZoneInfo("UTC")
+            )
 
+        return fecha.astimezone(
+            ZoneInfo("America/Lima")
+        )
+
+    except (ValueError, TypeError):
+
+        return None
 
 # ==================================================
 # DIÁLOGO: REGISTRAR SESIÓN
@@ -165,17 +174,22 @@ def mostrar_historial_sesiones(participant_id):
         # FECHA Y HORA
         # ------------------------------------------
 
-        fecha_peru = convertir_hora_peru(
-            session_date
-        )
+        fecha_peru = convertir_hora_peru(session_date)
 
-        fecha = fecha_peru.strftime(
-            "%d/%m/%Y"
-        )
+        if fecha_peru is not None:
 
-        hora = fecha_peru.strftime(
-            "%H:%M"
-        )
+            fecha = fecha_peru.strftime(
+                "%d/%m/%Y"
+            )
+
+            hora = fecha_peru.strftime(
+                "%H:%M"
+            )
+
+        else:
+
+            fecha = "Fecha no disponible"
+            hora = "Hora no disponible"
 
         # ------------------------------------------
         # ESTADO

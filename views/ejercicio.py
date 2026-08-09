@@ -3,6 +3,7 @@ import cv2
 import mediapipe as mp
 import time
 import os
+from datetime import datetime
 
 from utils.ejercicios import obtener_ejercicios
 
@@ -108,6 +109,14 @@ def pantalla_ejercicio():
     if "tiempo_ultimo_ejercicio" not in st.session_state:
 
         st.session_state.tiempo_ultimo_ejercicio = 0
+
+    # ------------------------------------------------------
+    # EJERCICIOS PENDIENTES DE REGISTRAR
+    # ------------------------------------------------------
+
+    if "ejercicios_pendientes" not in st.session_state:
+
+        st.session_state.ejercicios_pendientes = []
 
 
     # ======================================================
@@ -827,6 +836,42 @@ def pantalla_ejercicio():
 
             if repeticiones >= total_repeticiones:
 
+                # ==============================================
+                # GUARDAR RESULTADO DEL EJERCICIO
+                # ==============================================
+
+                resultado_ejercicio = {
+
+                    "ejercicio_id": ejercicio["id"],
+
+                    "nombre": ejercicio["nombre"],
+
+                    "repeticiones_objetivo": total_repeticiones,
+
+                    "repeticiones_realizadas": repeticiones,
+
+                    "puntos": puntos_ganados,
+
+                    "duracion_segundos": tiempo_actual,
+
+                    "fecha_hora": datetime.now().isoformat(
+                        timespec="seconds"
+                    ),
+
+                    "resultado": "Completado"
+                }
+
+                # Agregar el ejercicio a la lista temporal
+
+                st.session_state.ejercicios_pendientes.append(
+                    resultado_ejercicio
+                )
+
+
+                # ==============================================
+                # ACTUALIZAR PUNTOS
+                # ==============================================
+
                 st.session_state.puntos += (
                     puntos_ganados
                 )
@@ -838,6 +883,11 @@ def pantalla_ejercicio():
                 st.session_state.tiempo_ultimo_ejercicio = (
                     tiempo_actual
                 )
+
+
+                # ==============================================
+                # FINALIZAR EJERCICIO
+                # ==============================================
 
                 st.session_state.ejercicio_activo = False
 
