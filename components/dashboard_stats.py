@@ -11,6 +11,8 @@ from database.participant_repository import (
     delete_session
 )
 
+from database.participant_repository import get_session_exercises
+from utils.ejercicios import obtener_ejercicios
 
 # ==================================================
 # CONVERTIR FECHA A HORA DE PERÚ
@@ -188,6 +190,17 @@ def mostrar_historial_sesiones(participant_id):
     st.divider()
 
     # ==================================================
+    # OBTENER NOMBRES DE LOS EJERCICIOS
+    # ==================================================
+
+    ejercicios = obtener_ejercicios()
+
+    nombres_ejercicios = {
+        ejercicio["id"]: ejercicio["nombre"]
+        for ejercicio in ejercicios
+    }
+
+    # ==================================================
     # RECORRER HISTORIAL
     # ==================================================
 
@@ -201,7 +214,9 @@ def mostrar_historial_sesiones(participant_id):
         # FECHA Y HORA
         # ------------------------------------------
 
-        fecha_peru = convertir_hora_peru(session_date)
+        fecha_peru = convertir_hora_peru(
+            session_date
+        )
 
         if fecha_peru is not None:
 
@@ -262,8 +277,81 @@ def mostrar_historial_sesiones(participant_id):
 
                 st.rerun()
 
+        # ==================================================
+        # EJERCICIOS DE ESTA SESIÓN
+        # ==================================================
+
+        ejercicios_sesion = get_session_exercises(
+            session_id
+        )
+
+        with st.expander("Ver ejercicios ▼"):
+
+            if not ejercicios_sesion:
+
+                st.info(
+                    "No hay ejercicios registrados "
+                    "en esta sesión."
+                )
+
+            else:
+
+                for ejercicio in ejercicios_sesion:
+
+                    (
+                        registro_id,
+                        session_id_db,
+                        exercise_id,
+                        repetitions_completed,
+                        target_repetitions,
+                        duration_seconds,
+                        points_earned,
+                        exercise_date,
+                        exercise_status
+                    ) = ejercicio
+
+                    nombre_ejercicio = (
+                        nombres_ejercicios.get(
+                            exercise_id,
+                            f"Ejercicio {exercise_id}"
+                        )
+                    )
+
+                    # ----------------------------------
+                    # CONVERTIR DURACIÓN
+                    # ----------------------------------
+
+                    minutos = (
+                        duration_seconds // 60
+                    )
+
+                    segundos = (
+                        duration_seconds % 60
+                    )
+
+                    duracion = (
+                        f"{minutos:02d}:"
+                        f"{segundos:02d}"
+                    )
+
+                    # ----------------------------------
+                    # MOSTRAR EJERCICIO
+                    # ----------------------------------
+
+                    st.markdown(
+                        f"""
+                        **{nombre_ejercicio}**
+
+                        {repetitions_completed} / {target_repetitions} repeticiones
+
+                        {points_earned} puntos · {duracion}
+                        """
+                    )
+
+                    st.divider()
+
         # ------------------------------------------
-        # SEPARADOR
+        # SEPARADOR ENTRE SESIONES
         # ------------------------------------------
 
         st.divider()
