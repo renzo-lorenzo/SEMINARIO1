@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from database.participant_repository import (
     get_session_count,
-    register_session,
+    register_session_with_exercises,
     cancel_last_session,
     get_session_history,
     delete_session
@@ -47,13 +47,27 @@ def convertir_hora_peru(session_date):
 @st.dialog("Registrar sesión")
 def confirmar_registro_sesion(participant_id):
 
+    ejercicios_pendientes = (
+        st.session_state.get(
+            "ejercicios_pendientes",
+            []
+        )
+    )
+
     st.write(
-        "¿Está seguro de que desea registrar una sesión "
+        "¿Está seguro de que desea registrar esta sesión "
         "para este participante?"
     )
 
     st.write(
-        "La sesión quedará registrada en el historial."
+        f"Ejercicios realizados en esta sesión: "
+        f"**{len(ejercicios_pendientes)}**"
+    )
+
+    st.write(
+        "Al registrar la sesión, todos los ejercicios "
+        "realizados hasta este momento quedarán guardados "
+        "en el historial."
     )
 
     col1, col2 = st.columns(2)
@@ -75,7 +89,20 @@ def confirmar_registro_sesion(participant_id):
             use_container_width=True
         ):
 
-            register_session(participant_id)
+            # ==========================================
+            # REGISTRAR SESIÓN + EJERCICIOS
+            # ==========================================
+
+            register_session_with_exercises(
+                participant_id,
+                ejercicios_pendientes
+            )
+
+            # ==========================================
+            # LIMPIAR EJERCICIOS DE LA SESIÓN ACTUAL
+            # ==========================================
+
+            st.session_state.ejercicios_pendientes = []
 
             st.success(
                 "Sesión registrada correctamente."

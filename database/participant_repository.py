@@ -48,6 +48,37 @@ def initialize_database():
     cursor = conn.cursor()
 
     # ==========================================
+    # TABLA DE EJERCICIOS REALIZADOS POR SESIÓN
+    # ==========================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS session_exercises (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            session_id INTEGER NOT NULL,
+
+            exercise_id INTEGER NOT NULL,
+
+            repetitions_completed INTEGER NOT NULL DEFAULT 0,
+
+            target_repetitions INTEGER NOT NULL DEFAULT 10,
+
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+
+            points_earned INTEGER NOT NULL DEFAULT 0,
+
+            exercise_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            status TEXT DEFAULT 'completed',
+
+            FOREIGN KEY (session_id)
+                REFERENCES sessions(id)
+
+        )
+    """)
+
+    # ==========================================
     # TABLA DE PARTICIPANTES
     # ==========================================
 
@@ -428,6 +459,129 @@ def register_session(participant_id):
 
     return session_id
 
+def register_session_with_exercises(
+    participant_id,
+    ejercicios_pendientes
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        # ==========================================
+        # CREAR LA SESIÓN
+        # ==========================================
+
+        cursor.execute("""
+            INSERT INTO sessions
+            (
+                participant_id,
+                session_date,
+                status
+            )
+            VALUES
+            (
+                ?,
+                CURRENT_TIMESTAMP,
+                'active'
+            )
+        """, (participant_id,))
+
+        session_id = cursor.lastrowid
+
+        # ==========================================
+        # GUARDAR LOS EJERCICIOS DE LA SESIÓN
+        # ==========================================
+
+        for ejercicio in ejercicios_pendientes:
+
+            cursor.execute("""
+                INSERT INTO session_exercises
+                (
+                    session_id,
+                    exercise_id,
+                    repetitions_completed,
+                    target_repetitions,
+                    duration_seconds,
+                    points_earned,
+                    exercise_date,
+                    status
+                )
+                VALUES
+                (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?
+                )
+            """, (
+                session_id,
+                ejercicio["ejercicio_id"],
+                ejercicio["repeticiones_realizadas"],
+                ejercicio["repeticiones_objetivo"],
+                ejercicio["duracion_segundos"],
+                ejercicio["puntos"],
+                ejercicio["fecha_hora"],
+                ejercicio["resultado"].lower()
+            ))
+
+        # ==========================================
+        # CONFIRMAR TODO
+        # ==========================================
+
+        conn.commit()
+
+        return session_id
+
+    except Exception:
+
+        # Si algo falla, no dejamos una sesión
+        # creada parcialmente.
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()
+
+def get_session_exercises(session_id):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            session_id,
+            exercise_id,
+            repetitions_completed,
+            target_repetitions,
+            duration_seconds,
+            points_earned,
+            exercise_date,
+            status
+
+        FROM session_exercises
+
+        WHERE session_id = ?
+
+        ORDER BY
+            exercise_date ASC,
+            id ASC
+    """, (session_id,))
+
+    exercises = cursor.fetchall()
+
+    conn.close()
+
+    return exercises
 
 def cancel_last_session(participant_id):
 
@@ -497,10 +651,31 @@ def delete_session(session_id):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM sessions
-        WHERE id = ?
-    """, (session_id,))
+    try:
 
-    conn.commit()
-    conn.close()
+        # Primero eliminar los ejercicios
+        # asociados a la sesión.
+
+        cursor.execute("""
+            DELETE FROM session_exercises
+            WHERE session_id = ?
+        """, (session_id,))
+
+        # Luego eliminar la sesión.
+
+        cursor.execute("""
+            DELETE FROM sessions
+            WHERE id = ?
+        """, (session_id,))
+
+        conn.commit()
+
+    except Exception:
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()
