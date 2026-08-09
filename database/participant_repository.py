@@ -400,14 +400,7 @@ def get_session_count(participant_id):
     return result[0]
 
 
-def register_session(
-    participant_id,
-    exercise_id=None,
-    repetitions_completed=0,
-    target_repetitions=10,
-    duration_seconds=0,
-    points_earned=0
-):
+def register_session(participant_id):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -416,29 +409,24 @@ def register_session(
         INSERT INTO sessions
         (
             participant_id,
-            exercise_id,
-            repetitions_completed,
-            target_repetitions,
-            duration_seconds,
-            points_earned,
+            session_date,
             status
         )
-
         VALUES
         (
-            ?, ?, ?, ?, ?, ?, 'active'
+            ?,
+            CURRENT_TIMESTAMP,
+            'active'
         )
-    """, (
-        participant_id,
-        exercise_id,
-        repetitions_completed,
-        target_repetitions,
-        duration_seconds,
-        points_earned
-    ))
+    """, (participant_id,))
+
+    # Obtener el ID de la sesión recién creada
+    session_id = cursor.lastrowid
 
     conn.commit()
     conn.close()
+
+    return session_id
 
 
 def cancel_last_session(participant_id):
@@ -485,12 +473,7 @@ def get_session_history(participant_id):
     cursor.execute("""
         SELECT
             id,
-            exercise_id,
             session_date,
-            repetitions_completed,
-            target_repetitions,
-            duration_seconds,
-            points_earned,
             status
 
         FROM sessions
