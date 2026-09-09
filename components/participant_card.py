@@ -1,6 +1,11 @@
 import streamlit as st
 
-from database.participant_repository import delete_participant
+from database.participant_repository import (
+    delete_participant,
+    get_total_points_by_participant
+)
+
+from utils.ejercicios import calcular_nivel_por_puntos
 
 
 def mostrar_tarjeta_participante(participante):
@@ -49,8 +54,17 @@ def mostrar_tarjeta_participante(participante):
                 st.session_state.nombre = nombre
                 st.session_state.edad = edad
 
-                st.session_state.puntos = 0
-                st.session_state.nivel = 1
+                puntos_acumulados = get_total_points_by_participant(
+                    participante["id"]
+                )
+
+                st.session_state.puntos = puntos_acumulados
+
+                st.session_state.nivel = calcular_nivel_por_puntos(
+                    puntos_acumulados
+                )
+
+                st.session_state.ejercicios_pendientes = []
 
                 st.rerun()
 

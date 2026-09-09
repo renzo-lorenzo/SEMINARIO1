@@ -5,7 +5,10 @@ import time
 import os
 from datetime import datetime
 
-from utils.ejercicios import obtener_ejercicios
+from utils.ejercicios import (
+    obtener_ejercicios,
+    calcular_nivel_por_puntos
+)
 
 from utils.evaluacion_movimiento import (
     calcular_angulo,
@@ -283,7 +286,7 @@ def pantalla_ejercicio():
     with col_camara:
 
         st.subheader(
-            "Cámara del paciente"
+            "Cámara del participante"
         )
 
         camara_placeholder = st.empty()
@@ -876,6 +879,10 @@ def pantalla_ejercicio():
                     puntos_ganados
                 )
 
+                st.session_state.nivel = calcular_nivel_por_puntos(
+    st.session_state.puntos
+)
+
                 st.session_state.puntos_ganados_ultimo = (
                     puntos_ganados
                 )
@@ -908,6 +915,10 @@ def pantalla_ejercicio():
                     puntos_ganados
                 )
 
+                st.session_state.nivel = calcular_nivel_por_puntos(
+    st.session_state.puntos
+)
+
                 st.session_state.puntos_ganados_ultimo = (
                     puntos_ganados
                 )
@@ -938,6 +949,10 @@ def pantalla_ejercicio():
                 st.session_state.puntos += (
                     puntos_ganados
                 )
+
+                st.session_state.nivel = calcular_nivel_por_puntos(
+    st.session_state.puntos
+)
 
                 st.session_state.puntos_ganados_ultimo = (
                     puntos_ganados

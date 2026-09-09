@@ -259,8 +259,12 @@ def create_participant(
         age
     ))
 
+    participant_id = cursor.lastrowid
+
     conn.commit()
     conn.close()
+
+    return participant_id
 
 
 def delete_participant(participant_id):
@@ -430,6 +434,25 @@ def get_session_count(participant_id):
 
     return result[0]
 
+def get_total_points_by_participant(participant_id):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(se.points_earned), 0)
+        FROM session_exercises se
+        INNER JOIN sessions s
+            ON se.session_id = s.id
+        WHERE s.participant_id = ?
+        AND s.status = 'active'
+    """, (participant_id,))
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return result[0]
 
 def register_session(participant_id):
 

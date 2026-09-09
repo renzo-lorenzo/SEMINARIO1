@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from database.participant_repository import (
     get_session_count,
+    get_total_points_by_participant,
     register_session_with_exercises,
     cancel_last_session,
     get_session_history,
@@ -12,7 +13,10 @@ from database.participant_repository import (
 )
 
 from database.participant_repository import get_session_exercises
-from utils.ejercicios import obtener_ejercicios
+from utils.ejercicios import (
+    obtener_ejercicios,
+    calcular_nivel_por_puntos
+)
 
 # ==================================================
 # CONVERTIR FECHA A HORA DE PERÚ
@@ -464,6 +468,26 @@ def mostrar_dashboard_stats():
 
     sesiones = get_session_count(
         participant_id
+    )
+
+    puntos_guardados = get_total_points_by_participant(
+        participant_id
+    )
+
+    puntos_pendientes = sum(
+        ejercicio.get("puntos", 0)
+        for ejercicio in st.session_state.get(
+            "ejercicios_pendientes",
+            []
+        )
+    )
+
+    st.session_state.puntos = (
+        puntos_guardados + puntos_pendientes
+    )
+
+    st.session_state.nivel = calcular_nivel_por_puntos(
+        st.session_state.puntos
     )
 
 

@@ -10,7 +10,7 @@ initialize_database()
 
 
 st.set_page_config(
-    page_title="KneePlay Rehab",
+    page_title="Activate",
     page_icon="🦵",
     layout="wide"
 )

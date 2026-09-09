@@ -2,8 +2,11 @@ import streamlit as st
 
 from database.participant_repository import (
     create_participant,
-    get_participant_by_id
+    get_participant_by_id,
+    get_total_points_by_participant
 )
+
+from utils.ejercicios import calcular_nivel_por_puntos
 
 
 def mostrar_formulario_participante():
@@ -105,9 +108,17 @@ def mostrar_formulario_participante():
 
                     st.session_state.edad = participante["age"]
 
-                    st.session_state.puntos = 0
+                    puntos_acumulados = get_total_points_by_participant(
+                        participant_id
+                    )
 
-                    st.session_state.nivel = 1
+                    st.session_state.puntos = puntos_acumulados
+
+                    st.session_state.nivel = calcular_nivel_por_puntos(
+                        puntos_acumulados
+                    )
+
+                    st.session_state.ejercicios_pendientes = []
 
                     st.session_state.mostrar_formulario = False
 
