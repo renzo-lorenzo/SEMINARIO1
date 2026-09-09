@@ -1,4 +1,8 @@
 import streamlit as st
+from utils.asistente_voz import (
+    inicializar_asistente_voz,
+    mostrar_control_voz_global
+)
 from utils.styles import cargar_estilos
 from views.login import pantalla_login
 from views.dashboard import pantalla_dashboard
@@ -14,6 +18,9 @@ st.set_page_config(
     page_icon="🦵",
     layout="wide"
 )
+
+inicializar_asistente_voz()
+mostrar_control_voz_global()
 
 cargar_estilos()
 
@@ -43,6 +50,8 @@ if "puntos" not in st.session_state:
 
 if "nivel" not in st.session_state:
     st.session_state.nivel = 1
+
+inicializar_asistente_voz()
 
 if not st.session_state.logged_in:
     pantalla_login()

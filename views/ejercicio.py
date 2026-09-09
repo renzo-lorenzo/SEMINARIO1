@@ -5,6 +5,11 @@ import time
 import os
 from datetime import datetime
 
+from utils.asistente_voz import (
+    inicializar_asistente_voz,
+    hablar
+)
+
 from utils.ejercicios import (
     obtener_ejercicios,
     calcular_nivel_por_puntos
@@ -121,6 +126,7 @@ def pantalla_ejercicio():
 
         st.session_state.ejercicios_pendientes = []
 
+    inicializar_asistente_voz()
 
     # ======================================================
     # CONFIGURACIÓN DEL EJERCICIO
@@ -269,6 +275,12 @@ def pantalla_ejercicio():
         "El sistema analizará tu movimiento automáticamente."
     )
 
+    hablar(
+        f"Vamos a iniciar el ejercicio {ejercicio['nombre']}. "
+        "Ubícate frente a la cámara y mantén el cuerpo visible.",
+        clave=f"inicio_ejercicio_{ejercicio['id']}",
+        cooldown=60
+    )
 
     # ======================================================
     # COLUMNAS PRINCIPALES
@@ -555,11 +567,16 @@ def pantalla_ejercicio():
                 if puntos_pierna is None:
 
                     mensaje = (
-                        "No se detecta correctamente "
-                        "la pierna. Ubícate de lado "
-                        "frente a la cámara."
+                        "No se detectan correctamente "
+                        "los puntos corporales necesarios. "
+                        "Ajusta tu posición frente a la cámara."
                     )
 
+                    hablar(
+                        mensaje,
+                        clave="ajustar_posicion",
+                        cooldown=8
+                    )
 
                 # ------------------------------------------
                 # PIERNA DETECTADA
@@ -663,15 +680,25 @@ def pantalla_ejercicio():
 
                         puntos_ganados += 10
 
+                        hablar(
+                            f"Muy bien. Repetición {repeticiones} de {total_repeticiones}.",
+                            clave=f"rep_{ejercicio['id']}_{repeticiones}",
+                            cooldown=1
+                        )
 
             else:
 
                 mensaje = (
-                    "No se detectó postura. "
-                    "Colócate de lado y muestra "
-                    "la pierna completa."
+                    "No se detectó la postura. "
+                    "Ubícate frente a la cámara y "
+                    "mantén el cuerpo visible."
                 )
 
+                hablar(
+                    mensaje,
+                    clave="no_detecta_postura",
+                    cooldown=8
+                )
 
             # ==================================================
             # MOSTRAR CÁMARA
@@ -899,6 +926,12 @@ def pantalla_ejercicio():
                 st.session_state.ejercicio_activo = False
 
                 st.session_state.ejercicio_completado = True
+
+                hablar(
+                    f"Rutina completada. Ganaste {puntos_ganados} estrellas. Buen trabajo.",
+                    clave=f"rutina_completada_{ejercicio['id']}",
+                    cooldown=3
+                )
 
                 st.balloons()
 
