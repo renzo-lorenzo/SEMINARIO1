@@ -1,7 +1,8 @@
 import streamlit as st
 from utils.asistente_voz import (
     inicializar_asistente_voz,
-    mostrar_control_voz_global
+    mostrar_control_voz_global,
+    hablar_bienvenida_si_corresponde
 )
 from utils.styles import cargar_estilos
 from views.login import pantalla_login
@@ -23,6 +24,7 @@ inicializar_asistente_voz()
 mostrar_control_voz_global()
 
 cargar_estilos()
+inicializar_asistente_voz()
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -56,6 +58,8 @@ inicializar_asistente_voz()
 if not st.session_state.logged_in:
     pantalla_login()
 else:
+    hablar_bienvenida_si_corresponde()
+
     if st.session_state.pantalla == "dashboard":
         pantalla_dashboard()
     elif st.session_state.pantalla == "ejercicio":

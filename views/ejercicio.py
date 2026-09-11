@@ -7,7 +7,9 @@ from datetime import datetime
 
 from utils.asistente_voz import (
     inicializar_asistente_voz,
-    hablar
+    hablar,
+    hablar_repeticion,
+    hablar_fin_ejercicio_si_corresponde
 )
 
 from utils.ejercicios import (
@@ -150,6 +152,8 @@ def pantalla_ejercicio():
     # ======================================================
 
     if st.session_state.ejercicio_completado:
+
+        hablar_fin_ejercicio_si_corresponde()
 
         st.markdown(
             f'<div class="title">{ejercicio["nombre"]}</div>',
@@ -680,10 +684,10 @@ def pantalla_ejercicio():
 
                         puntos_ganados += 10
 
-                        hablar(
-                            f"Muy bien. Repetición {repeticiones} de {total_repeticiones}.",
-                            clave=f"rep_{ejercicio['id']}_{repeticiones}",
-                            cooldown=1
+                        hablar_repeticion(
+                            repeticiones,
+                            total_repeticiones,
+                            ejercicio["id"]
                         )
 
             else:
@@ -924,6 +928,8 @@ def pantalla_ejercicio():
                 # ==============================================
 
                 st.session_state.ejercicio_activo = False
+
+                st.session_state.voz_fin_ejercicio_pendiente = True
 
                 st.session_state.ejercicio_completado = True
 

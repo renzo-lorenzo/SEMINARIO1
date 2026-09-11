@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import os
 import base64
-
+from utils.asistente_voz import hablar_indicacion_tutorial
 
 def mostrar_video_autoplay(ruta_video, ancho="70%"):
     if not os.path.exists(ruta_video):
@@ -64,6 +64,8 @@ def pantalla_tutorial():
     )
 
     mostrar_video_autoplay(ruta_video, ancho="70%")
+    
+    hablar_indicacion_tutorial(ejercicio)
 
     st.markdown("### Recomendaciones antes de iniciar")
     st.write("""
@@ -75,7 +77,7 @@ def pantalla_tutorial():
 
     contador = st.empty()
 
-    duracion_tutorial = 8
+    duracion_tutorial = 13
 
     for segundos in range(duracion_tutorial, 0, -1):
         contador.info(f"El ejercicio iniciará automáticamente en {segundos} segundos...")
@@ -84,5 +86,6 @@ def pantalla_tutorial():
     st.session_state.ejercicio_activo = True
     st.session_state.ejercicio_completado = False
     st.session_state.puntos_ganados_ultimo = 0
+    st.session_state.voz_fin_ejercicio_pendiente = False
     st.session_state.pantalla = "ejercicio"
     st.rerun()

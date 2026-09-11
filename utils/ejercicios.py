@@ -10,6 +10,7 @@ def obtener_ejercicios():
             "objetivo": "Favorecer movilidad y activación de miembros inferiores",
             "tipo_evaluacion": "extension_rodilla",
             "video": "imagenes/tutorial_extension_rodilla.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 1, siéntate en una silla, ubica tu cuerpo ligeramente de lado y repite los movimientos"
         },
         {
             "id": 2,
@@ -21,6 +22,7 @@ def obtener_ejercicios():
             "objetivo": "Fortalecer miembros inferiores y control corporal",
             "tipo_evaluacion": "elevacion_pierna_recta",
             "video": "imagenes/tutorial_elevacion_pierna.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 2, acuéstate de forma horizontal y repite los movimientos"
         },
         {
             "id": 3,
@@ -32,6 +34,7 @@ def obtener_ejercicios():
             "objetivo": "Trabajar fuerza funcional y estabilidad inicial",
             "tipo_evaluacion": "mini_sentadilla",
             "video": "imagenes/tutorial_mini_sentadilla.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 3, colócate de pie frente a la cámara y repite los movimientos"
         },
         {
             "id": 4,
@@ -43,6 +46,7 @@ def obtener_ejercicios():
             "objetivo": "Fortalecer glúteos y musculatura de soporte",
             "tipo_evaluacion": "puente_gluteo",
             "video": "imagenes/tutorial_puente_gluteo.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 4, acuéstate boca arriba en posición horizontal y repite los movimientos"
         },
         {
             "id": 5,
@@ -54,6 +58,7 @@ def obtener_ejercicios():
             "objetivo": "Mejorar fuerza funcional, equilibrio y control de miembros inferiores",
             "tipo_evaluacion": "step_basico",
             "video": "imagenes/tutorial_step_basico.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 5, colócate frente a la cámara y repite los movimientos"
         },
         {
             "id": 6,
@@ -65,6 +70,7 @@ def obtener_ejercicios():
             "objetivo": "Mejorar estabilidad lateral y control de cadera",
             "tipo_evaluacion": "abduccion_cadera",
             "video": "imagenes/tutorial_abduccion_cadera.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 6, colócate de pie en diagonal frente a la cámara y usa un apoyo cercano, repite los movimientos"
         },
         {
             "id": 7,
@@ -76,6 +82,7 @@ def obtener_ejercicios():
             "objetivo": "Fortalecer un patrón funcional de la vida diaria",
             "tipo_evaluacion": "sit_to_stand",
             "video": "imagenes/tutorial_sit_to_stand.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 7, siéntate en una silla firme frente a la cámara, con el cuerpo ligeramente de lado y repite los movimientos"
         },
         {
             "id": 8,
@@ -87,6 +94,7 @@ def obtener_ejercicios():
             "objetivo": "Mejorar coordinación, movilidad y control funcional",
             "tipo_evaluacion": "marcha_sitio",
             "video": "imagenes/tutorial_marcha_sitio.mp4",
+            "indicacion_voz_tutorial": "Ejercicio 8, colócate de pie frente a la cámara, mantén el cuerpo completo visible y repite los movimientos"
         },
     ]
 

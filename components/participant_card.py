@@ -66,6 +66,8 @@ def mostrar_tarjeta_participante(participante):
 
                 st.session_state.ejercicios_pendientes = []
 
+                st.session_state.voz_bienvenida_pendiente = True
+
                 st.rerun()
 
         # ============================================

@@ -28,6 +28,7 @@ def mostrar_formulario_participante():
             st.session_state.mostrar_formulario = True
             st.rerun()
 
+            st.session_state.voz_bienvenida_pendiente = True
         return
 
     # ==========================================
