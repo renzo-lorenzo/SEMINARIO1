@@ -130,3 +130,56 @@ def calcular_nivel_por_puntos(puntos):
         return 2
 
     return 1
+
+def obtener_ejercicios_desbloqueados(puntos):
+    ejercicios = obtener_ejercicios()
+
+    ejercicios_desbloqueados = [
+        ejercicio
+        for ejercicio in ejercicios
+        if puntos >= ejercicio["puntos_requeridos"]
+    ]
+
+    return ejercicios_desbloqueados
+
+
+def calcular_progreso_mapa(puntos):
+    ejercicios = obtener_ejercicios()
+    total_ejercicios = len(ejercicios)
+
+    ejercicios_desbloqueados = obtener_ejercicios_desbloqueados(
+        puntos
+    )
+
+    cantidad_desbloqueados = len(
+        ejercicios_desbloqueados
+    )
+
+    if total_ejercicios == 0:
+        porcentaje = 0
+    else:
+        porcentaje = int(
+            (cantidad_desbloqueados / total_ejercicios) * 100
+        )
+
+    return cantidad_desbloqueados, total_ejercicios, porcentaje
+
+
+def obtener_siguiente_ejercicio_bloqueado(puntos):
+    ejercicios = obtener_ejercicios()
+
+    ejercicios_bloqueados = [
+        ejercicio
+        for ejercicio in ejercicios
+        if puntos < ejercicio["puntos_requeridos"]
+    ]
+
+    if not ejercicios_bloqueados:
+        return None
+
+    ejercicios_bloqueados = sorted(
+        ejercicios_bloqueados,
+        key=lambda ejercicio: ejercicio["puntos_requeridos"]
+    )
+
+    return ejercicios_bloqueados[0]

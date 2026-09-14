@@ -15,7 +15,9 @@ from database.participant_repository import (
 from database.participant_repository import get_session_exercises
 from utils.ejercicios import (
     obtener_ejercicios,
-    calcular_nivel_por_puntos
+    calcular_nivel_por_puntos,
+    calcular_progreso_mapa,
+    obtener_siguiente_ejercicio_bloqueado
 )
 
 # ==================================================
@@ -490,6 +492,18 @@ def mostrar_dashboard_stats():
         st.session_state.puntos
     )
 
+    desbloqueados, total_ejercicios, progreso_mapa = calcular_progreso_mapa(
+        st.session_state.puntos
+    )
+
+    siguiente_ejercicio = obtener_siguiente_ejercicio_bloqueado(
+        st.session_state.puntos
+    )
+
+    grados_progreso = int(
+        (progreso_mapa / 100) * 360
+    )
+
 
     # ==================================================
     # COLUMNAS PRINCIPALES
@@ -612,7 +626,7 @@ def mostrar_dashboard_stats():
 
 
         st.html(
-            """
+            f"""
             <div style="
                 display: flex;
                 justify-content: center;
@@ -626,8 +640,8 @@ def mostrar_dashboard_stats():
                     border-radius: 50%;
 
                     background: conic-gradient(
-                        #2e8b57 0deg,
-                        #e5e7eb 0deg
+                        #2e8b57 0deg {grados_progreso}deg,
+                        #e5e7eb {grados_progreso}deg 360deg
                     );
 
                     display: flex;
@@ -652,7 +666,7 @@ def mostrar_dashboard_stats():
                         color: #333333;
                     ">
 
-                        0%
+                        {progreso_mapa}%
 
                     </div>
 
@@ -661,3 +675,35 @@ def mostrar_dashboard_stats():
             </div>
             """
         )
+
+        st.markdown(
+            f"""
+            <div style="
+                text-align: center;
+                font-size: 18px;
+                color: #444444;
+                margin-top: -10px;
+            ">
+                Has desbloqueado <strong>{desbloqueados} de {total_ejercicios}</strong> ejercicios.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        if siguiente_ejercicio:
+
+            puntos_faltantes = (
+                siguiente_ejercicio["puntos_requeridos"]
+                - st.session_state.puntos
+            )
+
+            st.info(
+                f"Te faltan {puntos_faltantes} puntos para desbloquear: "
+                f"{siguiente_ejercicio['nombre']}."
+            )
+
+        else:
+
+            st.success(
+                "Has desbloqueado todos los ejercicios del mapa."
+            )
