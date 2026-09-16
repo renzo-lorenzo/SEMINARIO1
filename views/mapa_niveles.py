@@ -216,19 +216,6 @@ def pantalla_mapa_niveles():
                         key=f"video_{ejercicio['id']}"
                     )
 
-                    st.write(
-                        ejercicio["descripcion"]
-                    )
-
-                    st.caption(
-                        f"Objetivo: "
-                        f"{ejercicio['objetivo']}"
-                    )
-
-                    st.caption(
-                        f"Ejercicio desbloqueado · Nivel {ejercicio['nivel_dificultad']}"
-                    )
-
                     # ----------------------------------
                     # REPETICIONES
                     # ----------------------------------
@@ -371,12 +358,7 @@ def pantalla_mapa_niveles():
                         key=f"video_{ejercicio['id']}"
                     )
 
-                    st.write(
-                        ejercicio["descripcion"]
-                    )
-
                     st.caption(
-                        f"Nivel {ejercicio['nivel_dificultad']} · "
                         f"Costo: {obtener_costo_ejercicio(ejercicio)} estrellas"
                     )
 

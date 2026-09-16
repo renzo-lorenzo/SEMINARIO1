@@ -1,11 +1,38 @@
 import streamlit as st
 
+
 def cargar_estilos():
-    st.markdown("""
-    <style>
+    st.markdown(
+        """
+        <style>
+
+        /* ==========================================
+           AJUSTE GENERAL DE ESPACIO
+           ========================================== */
+
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+        }
+
+        /* No ocultar header ni toolbar de Streamlit,
+           porque ahí puede ubicarse el control de voz */
+
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
+
+        /* ==========================================
+           FONDO GENERAL
+           ========================================== */
+
         .main {
             background-color: #F7FAFC;
         }
+
+        /* ==========================================
+           TÍTULOS GENERALES
+           ========================================== */
 
         .title {
             font-size: 42px;
@@ -21,6 +48,10 @@ def cargar_estilos():
             text-align: center;
             margin-bottom: 30px;
         }
+
+        /* ==========================================
+           TARJETAS
+           ========================================== */
 
         .card {
             background-color: white;
@@ -62,5 +93,8 @@ def cargar_estilos():
             font-size: 28px;
             font-weight: 800;
         }
-    </style>
-    """, unsafe_allow_html=True)
+
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
