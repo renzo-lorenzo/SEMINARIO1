@@ -260,7 +260,8 @@ def hablar_indicacion_tutorial(ejercicio):
 def hablar_repeticion(repeticiones, total_repeticiones, ejercicio_id):
     """
     Emite una frase breve por cada repetición correcta.
-    Siempre indica el avance: Repetición X de Y.
+    Indica el avance sin decir la palabra 'repetición',
+    para que la instrucción sea más corta y natural.
     """
 
     if repeticiones <= 0:
@@ -285,12 +286,12 @@ def hablar_repeticion(repeticiones, total_repeticiones, ejercicio_id):
 
     if repeticiones >= total_repeticiones:
         texto = (
-            f"Repetición {repeticiones} de {total_repeticiones}. "
+            f"{repeticiones} de {total_repeticiones}. "
             "Rutina completada."
         )
     else:
         texto = (
-            f"Repetición {repeticiones} de {total_repeticiones}. "
+            f"{repeticiones} de {total_repeticiones}. "
             f"{frase_extra}"
         )
 

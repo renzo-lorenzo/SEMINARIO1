@@ -7,6 +7,7 @@ from datetime import datetime
 
 from utils.asistente_voz import (
     inicializar_asistente_voz,
+    mostrar_control_voz_global,
     hablar,
     hablar_repeticion,
     hablar_fin_ejercicio_si_corresponde
@@ -106,6 +107,8 @@ def registrar_resultado_temporal(
 
 def pantalla_ejercicio():
 
+    inicializar_asistente_voz()
+    mostrar_control_voz_global()
     # ------------------------------------------------------
     # OBTENER EJERCICIO ACTUAL
     # ------------------------------------------------------
@@ -171,8 +174,6 @@ def pantalla_ejercicio():
 
     if "puntos_ganados_total" not in st.session_state:
         st.session_state.puntos_ganados_total = 0
-
-    inicializar_asistente_voz()
 
     # ======================================================
     # CONFIGURACIÓN DEL EJERCICIO

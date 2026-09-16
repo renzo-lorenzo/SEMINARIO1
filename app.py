@@ -20,10 +20,8 @@ st.set_page_config(
     layout="wide"
 )
 
-inicializar_asistente_voz()
-mostrar_control_voz_global()
-
 cargar_estilos()
+
 inicializar_asistente_voz()
 
 if "logged_in" not in st.session_state:
@@ -63,7 +61,8 @@ if "puntos_gastados" not in st.session_state:
     st.session_state.puntos_gastados = 0
 
 inicializar_asistente_voz()
-
+if st.session_state.get("pantalla") != "ejercicio":
+    mostrar_control_voz_global()
 if not st.session_state.logged_in:
     pantalla_login()
 else:
