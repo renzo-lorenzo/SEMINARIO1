@@ -53,6 +53,12 @@ def mostrar_logout():
 
             st.session_state.puntos = 0
 
+            st.session_state.puntos_ganados_total = 0
+
+            st.session_state.puntos_gastados = 0
+
+            st.session_state.ejercicios_desbloqueados = [1]
+
             st.session_state.nivel = 1
 
             st.session_state.pantalla = "dashboard"

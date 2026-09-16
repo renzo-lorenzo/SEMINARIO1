@@ -13,8 +13,7 @@ from utils.asistente_voz import (
 )
 
 from utils.ejercicios import (
-    obtener_ejercicios,
-    calcular_nivel_por_puntos
+    obtener_ejercicios
 )
 
 from utils.evaluacion_movimiento import (
@@ -49,6 +48,59 @@ def mostrar_video_loop(ruta_video):
 
 
 # ==========================================================
+# REGISTRAR RESULTADO TEMPORAL DE LA SESIÓN ACTUAL
+# ==========================================================
+
+def registrar_resultado_temporal(
+    ejercicio,
+    total_repeticiones,
+    repeticiones,
+    estrellas_ganadas,
+    tiempo_actual,
+    resultado
+):
+    """
+    Guarda el ejercicio en una lista temporal para que luego pueda
+    aparecer en el historial cuando se registre la sesión desde el dashboard.
+    Las estrellas se suman de inmediato a la interfaz.
+    """
+
+    if "ejercicios_pendientes" not in st.session_state:
+        st.session_state.ejercicios_pendientes = []
+
+    resultado_ejercicio = {
+        "ejercicio_id": ejercicio["id"],
+        "nombre": ejercicio["nombre"],
+        "repeticiones_objetivo": total_repeticiones,
+        "repeticiones_realizadas": repeticiones,
+        "puntos": estrellas_ganadas,
+        "duracion_segundos": tiempo_actual,
+        "fecha_hora": datetime.now().isoformat(
+            timespec="seconds"
+        ),
+        "resultado": resultado
+    }
+
+    st.session_state.ejercicios_pendientes.append(
+        resultado_ejercicio
+    )
+
+    if "puntos" not in st.session_state:
+        st.session_state.puntos = 0
+
+    if "puntos_ganados_total" not in st.session_state:
+        st.session_state.puntos_ganados_total = 0
+
+    st.session_state.puntos += estrellas_ganadas
+
+    st.session_state.puntos_ganados_total += estrellas_ganadas
+
+    st.session_state.puntos_ganados_ultimo = estrellas_ganadas
+
+    st.session_state.tiempo_ultimo_ejercicio = tiempo_actual
+
+
+# ==========================================================
 # PANTALLA DEL EJERCICIO
 # ==========================================================
 
@@ -77,14 +129,12 @@ def pantalla_ejercicio():
 
         return
 
-
     # ------------------------------------------------------
     # ACTUALIZAR EL EJERCICIO DESDE ejercicios.py
     # ------------------------------------------------------
-    #
     # Esto evita que session_state conserve una versión
     # antigua del ejercicio.
-    #
+    # ------------------------------------------------------
 
     ejercicios_actualizados = obtener_ejercicios()
 
@@ -98,35 +148,29 @@ def pantalla_ejercicio():
         ejercicio_actual
     )
 
-    # Guardamos nuevamente la versión actualizada
     st.session_state.ejercicio_actual = ejercicio
-
 
     # ------------------------------------------------------
     # ESTADOS INICIALES
     # ------------------------------------------------------
 
     if "ejercicio_completado" not in st.session_state:
-
         st.session_state.ejercicio_completado = False
 
-
     if "puntos_ganados_ultimo" not in st.session_state:
-
         st.session_state.puntos_ganados_ultimo = 0
 
-
     if "tiempo_ultimo_ejercicio" not in st.session_state:
-
         st.session_state.tiempo_ultimo_ejercicio = 0
 
-    # ------------------------------------------------------
-    # EJERCICIOS PENDIENTES DE REGISTRAR
-    # ------------------------------------------------------
-
     if "ejercicios_pendientes" not in st.session_state:
-
         st.session_state.ejercicios_pendientes = []
+
+    if "puntos" not in st.session_state:
+        st.session_state.puntos = 0
+
+    if "puntos_ganados_total" not in st.session_state:
+        st.session_state.puntos_ganados_total = 0
 
     inicializar_asistente_voz()
 
@@ -134,18 +178,10 @@ def pantalla_ejercicio():
     # CONFIGURACIÓN DEL EJERCICIO
     # ======================================================
 
-    repeticiones = 0
-
-    # La cantidad configurada por la fisioterapeuta
-    # se guarda en session_state desde el mapa de niveles.
-
     total_repeticiones = st.session_state.get(
         "repeticiones_objetivo",
         ejercicio.get("repeticiones_objetivo", 10)
     )
-
-    puntos_ganados = 0
-
 
     # ======================================================
     # PANTALLA FINAL
@@ -162,19 +198,19 @@ def pantalla_ejercicio():
 
         st.markdown(
             '<div class="subtitle">'
-            'Ejercicio completado correctamente'
+            'Rutina finalizada'
             '</div>',
             unsafe_allow_html=True
         )
 
         st.success(
-            "Rutina completada correctamente."
+            "Rutina finalizada correctamente."
         )
 
         st.info(
-            f"Ganaste +"
-            f"{st.session_state.puntos_ganados_ultimo}"
-            " puntos."
+            f"Ganaste +{st.session_state.puntos_ganados_ultimo} estrellas. "
+            f"Ahora tienes {st.session_state.puntos} estrellas disponibles. "
+            "Recuerda registrar la sesión al finalizar para guardar el historial."
         )
 
         # --------------------------------------------------
@@ -186,14 +222,14 @@ def pantalla_ejercicio():
         with col_p1:
 
             st.metric(
-                "Puntos ganados",
+                "Estrellas ganadas",
                 st.session_state.puntos_ganados_ultimo
             )
 
         with col_p2:
 
             st.metric(
-                "Puntos actuales",
+                "Estrellas disponibles",
                 st.session_state.puntos
             )
 
@@ -222,7 +258,7 @@ def pantalla_ejercicio():
         with col1:
 
             if st.button(
-                "Volver al mapa de niveles",
+                "Volver al mapa de ejercicios",
                 use_container_width=True,
                 key="volver_mapa_completado"
             ):
@@ -252,7 +288,6 @@ def pantalla_ejercicio():
                 st.rerun()
 
         return
-
 
     # ======================================================
     # ENCABEZADO
@@ -294,7 +329,6 @@ def pantalla_ejercicio():
         [1.35, 1]
     )
 
-
     # ------------------------------------------------------
     # CÁMARA
     # ------------------------------------------------------
@@ -306,7 +340,6 @@ def pantalla_ejercicio():
         )
 
         camara_placeholder = st.empty()
-
 
     # ------------------------------------------------------
     # ANIMACIÓN + RESULTADOS
@@ -322,48 +355,31 @@ def pantalla_ejercicio():
 
         resultados_placeholder = st.empty()
 
-
     # ======================================================
     # VIDEOS
     # ======================================================
 
     videos_animacion = {
-
         1: "imagenes/tutorial_extension_rodilla.mp4",
-
         2: "imagenes/tutorial_elevacion_pierna.mp4",
-
         3: "imagenes/tutorial_mini_sentadilla.mp4",
-
         4: "imagenes/tutorial_puente_gluteo.mp4",
-
         5: "imagenes/tutorial_step_basico.mp4",
-
         6: "imagenes/tutorial_abduccion_cadera.mp4",
-
         7: "imagenes/tutorial_sit_to_stand.mp4",
-
         8: "imagenes/tutorial_marcha_sitio.mp4",
-
     }
-
 
     ruta_animacion = videos_animacion.get(
         ejercicio["id"],
         "imagenes/tutorial_extension_rodilla.mp4"
     )
 
-
-    # ------------------------------------------------------
-    # MOSTRAR ANIMACIÓN
-    # ------------------------------------------------------
-
     with animacion_placeholder.container():
 
         mostrar_video_loop(
             ruta_animacion
         )
-
 
     # ======================================================
     # CÁMARA
@@ -379,15 +395,13 @@ def pantalla_ejercicio():
 
         return
 
-
     # ======================================================
     # CONFIGURACIÓN DEL EJERCICIO
     # ======================================================
 
     repeticiones = 0
 
-    puntos_ganados = 0
-
+    estrellas_ganadas = 0
 
     # ======================================================
     # ESTADO DE EVALUACIÓN
@@ -407,7 +421,6 @@ def pantalla_ejercicio():
 
     angulos = []
 
-
     # ======================================================
     # CRONÓMETRO
     # ======================================================
@@ -415,7 +428,6 @@ def pantalla_ejercicio():
     tiempo_inicio = time.time()
 
     duracion_maxima = 300
-
 
     # ======================================================
     # BOTÓN DETENER
@@ -426,45 +438,31 @@ def pantalla_ejercicio():
         use_container_width=True
     )
 
-
     # ======================================================
     # MEDIAPIPE
     # ======================================================
 
     with mp_pose.Pose(
-
         static_image_mode=False,
-
         model_complexity=1,
-
         smooth_landmarks=True,
-
         enable_segmentation=False,
-
         min_detection_confidence=0.6,
-
         min_tracking_confidence=0.6
-
     ) as pose:
-
 
         # --------------------------------------------------
         # BUCLE PRINCIPAL
         # --------------------------------------------------
 
         while (
-
             cap.isOpened()
-
             and
-
             st.session_state.get(
                 "ejercicio_activo",
                 True
             )
-
         ):
-
 
             # ==============================================
             # CAPTURAR FRAME
@@ -479,7 +477,6 @@ def pantalla_ejercicio():
                 )
 
                 break
-
 
             # ==============================================
             # PREPARAR FRAME
@@ -497,7 +494,6 @@ def pantalla_ejercicio():
 
             height, width, _ = frame.shape
 
-
             # ==============================================
             # MEDIAPIPE
             # ==============================================
@@ -511,12 +507,10 @@ def pantalla_ejercicio():
                 rgb
             )
 
-
             mensaje = (
                 "Colócate de lado y "
                 "muestra la pierna completa"
             )
-
 
             # ==============================================
             # DETECCIÓN DE POSTURA
@@ -528,22 +522,16 @@ def pantalla_ejercicio():
                     results.pose_landmarks.landmark
                 )
 
-
                 # ------------------------------------------
                 # PIERNA DERECHA
                 # ------------------------------------------
 
                 puntos_pierna = obtener_puntos_pierna(
-
                     landmarks=landmarks,
-
                     width=width,
-
                     height=height,
-
                     lado="RIGHT"
                 )
-
 
                 # ------------------------------------------
                 # SI NO DETECTA DERECHA,
@@ -553,16 +541,11 @@ def pantalla_ejercicio():
                 if puntos_pierna is None:
 
                     puntos_pierna = obtener_puntos_pierna(
-
                         landmarks=landmarks,
-
                         width=width,
-
                         height=height,
-
                         lado="LEFT"
                     )
-
 
                 # ------------------------------------------
                 # NO DETECTÓ LA PIERNA
@@ -600,20 +583,15 @@ def pantalla_ejercicio():
                         puntos_pierna["tobillo"]
                     )
 
-
                     # --------------------------------------
                     # CALCULAR ÁNGULO
                     # --------------------------------------
 
                     angulo_actual = calcular_angulo(
-
                         punto_cadera,
-
                         punto_rodilla,
-
                         punto_tobillo
                     )
-
 
                     # --------------------------------------
                     # GUARDAR ÁNGULOS
@@ -635,44 +613,32 @@ def pantalla_ejercicio():
                             angulo_actual
                         )
 
-
                     # --------------------------------------
                     # DIBUJAR PIERNA
                     # --------------------------------------
 
                     dibujar_solo_pierna(
-
                         frame=frame,
-
                         puntos=puntos_pierna,
-
                         angulo_actual=angulo_actual
                     )
-
 
                     # --------------------------------------
                     # EVALUAR MOVIMIENTO
                     # --------------------------------------
 
                     rep_valida, estado_eval, mensaje = (
-
                         evaluar_movimiento(
-
                             ejercicio=ejercicio,
-
                             angulo=angulo_actual,
-
                             puntos=puntos_pierna,
-
                             estado_eval=estado_eval
                         )
                     )
 
-
                     estado_movimiento = (
                         estado_eval["fase"]
                     )
-
 
                     # --------------------------------------
                     # REPETICIÓN VÁLIDA
@@ -682,7 +648,7 @@ def pantalla_ejercicio():
 
                         repeticiones += 1
 
-                        puntos_ganados += 10
+                        estrellas_ganadas += 10
 
                         hablar_repeticion(
                             repeticiones,
@@ -714,14 +680,10 @@ def pantalla_ejercicio():
             )
 
             camara_placeholder.image(
-
                 frame_rgb,
-
                 channels="RGB",
-
                 use_container_width=True
             )
-
 
             # ==================================================
             # TIEMPO
@@ -733,20 +695,16 @@ def pantalla_ejercicio():
                 tiempo_inicio
             )
 
-
             # ==================================================
             # PROGRESO
             # ==================================================
 
             progreso = min(
-
                 repeticiones
                 /
                 total_repeticiones,
-
                 1.0
             )
-
 
             # ==================================================
             # ÁNGULOS
@@ -758,7 +716,6 @@ def pantalla_ejercicio():
                     sum(angulos)
                     /
                     len(angulos),
-
                     2
                 )
 
@@ -780,9 +737,8 @@ def pantalla_ejercicio():
 
                 max_texto = "-"
 
-
             # ==================================================
-            # RESULTADOS
+            # RESULTADOS EN TIEMPO REAL
             # ==================================================
 
             with resultados_placeholder.container():
@@ -796,22 +752,20 @@ def pantalla_ejercicio():
                 with col1:
 
                     st.metric(
-                        "Reps",
+                        "Repeticiones",
                         f"{repeticiones}/{total_repeticiones}"
                     )
 
                 with col2:
 
                     st.metric(
-                        "Puntos",
-                        puntos_ganados
+                        "Estrellas",
+                        estrellas_ganadas
                     )
-
 
                 st.progress(
                     progreso
                 )
-
 
                 # ------------------------------------------
                 # ÁNGULO
@@ -827,12 +781,10 @@ def pantalla_ejercicio():
 
                     angulo_texto = "-"
 
-
                 st.metric(
                     "Ángulo",
                     angulo_texto
                 )
-
 
                 # ------------------------------------------
                 # ESTADO
@@ -845,7 +797,6 @@ def pantalla_ejercicio():
                 st.caption(
                     f"Retroalimentación: {mensaje}"
                 )
-
 
                 # ------------------------------------------
                 # TIEMPO
@@ -863,69 +814,20 @@ def pantalla_ejercicio():
                     f"Tiempo: {minutos} min {segundos} s"
                 )
 
-
             # ==================================================
             # EJERCICIO COMPLETADO
             # ==================================================
 
             if repeticiones >= total_repeticiones:
 
-                # ==============================================
-                # GUARDAR RESULTADO DEL EJERCICIO
-                # ==============================================
-
-                resultado_ejercicio = {
-
-                    "ejercicio_id": ejercicio["id"],
-
-                    "nombre": ejercicio["nombre"],
-
-                    "repeticiones_objetivo": total_repeticiones,
-
-                    "repeticiones_realizadas": repeticiones,
-
-                    "puntos": puntos_ganados,
-
-                    "duracion_segundos": tiempo_actual,
-
-                    "fecha_hora": datetime.now().isoformat(
-                        timespec="seconds"
-                    ),
-
-                    "resultado": "Completado"
-                }
-
-                # Agregar el ejercicio a la lista temporal
-
-                st.session_state.ejercicios_pendientes.append(
-                    resultado_ejercicio
+                registrar_resultado_temporal(
+                    ejercicio=ejercicio,
+                    total_repeticiones=total_repeticiones,
+                    repeticiones=repeticiones,
+                    estrellas_ganadas=estrellas_ganadas,
+                    tiempo_actual=tiempo_actual,
+                    resultado="Completado"
                 )
-
-
-                # ==============================================
-                # ACTUALIZAR PUNTOS
-                # ==============================================
-
-                st.session_state.puntos += (
-                    puntos_ganados
-                )
-
-                st.session_state.nivel = calcular_nivel_por_puntos(
-    st.session_state.puntos
-)
-
-                st.session_state.puntos_ganados_ultimo = (
-                    puntos_ganados
-                )
-
-                st.session_state.tiempo_ultimo_ejercicio = (
-                    tiempo_actual
-                )
-
-
-                # ==============================================
-                # FINALIZAR EJERCICIO
-                # ==============================================
 
                 st.session_state.ejercicio_activo = False
 
@@ -934,7 +836,7 @@ def pantalla_ejercicio():
                 st.session_state.ejercicio_completado = True
 
                 hablar(
-                    f"Rutina completada. Ganaste {puntos_ganados} estrellas. Buen trabajo.",
+                    f"Rutina completada. Ganaste {estrellas_ganadas} estrellas. Buen trabajo.",
                     clave=f"rutina_completada_{ejercicio['id']}",
                     cooldown=3
                 )
@@ -943,27 +845,19 @@ def pantalla_ejercicio():
 
                 break
 
-
             # ==================================================
             # TIEMPO MÁXIMO
             # ==================================================
 
             if tiempo_actual >= duracion_maxima:
 
-                st.session_state.puntos += (
-                    puntos_ganados
-                )
-
-                st.session_state.nivel = calcular_nivel_por_puntos(
-    st.session_state.puntos
-)
-
-                st.session_state.puntos_ganados_ultimo = (
-                    puntos_ganados
-                )
-
-                st.session_state.tiempo_ultimo_ejercicio = (
-                    tiempo_actual
+                registrar_resultado_temporal(
+                    ejercicio=ejercicio,
+                    total_repeticiones=total_repeticiones,
+                    repeticiones=repeticiones,
+                    estrellas_ganadas=estrellas_ganadas,
+                    tiempo_actual=tiempo_actual,
+                    resultado="Tiempo máximo"
                 )
 
                 st.session_state.ejercicio_activo = False
@@ -976,30 +870,22 @@ def pantalla_ejercicio():
 
                 break
 
-
             # ==================================================
             # DETENER MANUALMENTE
             # ==================================================
 
             if detener:
 
+                registrar_resultado_temporal(
+                    ejercicio=ejercicio,
+                    total_repeticiones=total_repeticiones,
+                    repeticiones=repeticiones,
+                    estrellas_ganadas=estrellas_ganadas,
+                    tiempo_actual=tiempo_actual,
+                    resultado="Detenido"
+                )
+
                 st.session_state.ejercicio_activo = False
-
-                st.session_state.puntos += (
-                    puntos_ganados
-                )
-
-                st.session_state.nivel = calcular_nivel_por_puntos(
-    st.session_state.puntos
-)
-
-                st.session_state.puntos_ganados_ultimo = (
-                    puntos_ganados
-                )
-
-                st.session_state.tiempo_ultimo_ejercicio = (
-                    tiempo_actual
-                )
 
                 st.session_state.ejercicio_completado = True
 
@@ -1009,20 +895,17 @@ def pantalla_ejercicio():
 
                 break
 
-
             # ==================================================
             # PEQUEÑA PAUSA
             # ==================================================
 
             time.sleep(0.03)
 
-
     # ======================================================
     # LIBERAR CÁMARA
     # ======================================================
 
     cap.release()
-
 
     # ======================================================
     # MOSTRAR PANTALLA FINAL
@@ -1031,7 +914,6 @@ def pantalla_ejercicio():
     if st.session_state.ejercicio_completado:
 
         st.rerun()
-
 
     # ======================================================
     # BOTONES INFERIORES
@@ -1042,7 +924,7 @@ def pantalla_ejercicio():
     with col1:
 
         if st.button(
-            "Volver al mapa de niveles",
+            "Volver al mapa de ejercicios",
             use_container_width=True,
             key="btn_volver_mapa"
         ):
@@ -1052,7 +934,6 @@ def pantalla_ejercicio():
             st.session_state.pantalla = "mapa"
 
             st.rerun()
-
 
     with col2:
 

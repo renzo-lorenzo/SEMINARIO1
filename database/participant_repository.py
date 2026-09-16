@@ -163,6 +163,34 @@ def initialize_database():
 
         )
     """)
+    # ==========================================
+    # TABLA DE EJERCICIOS DESBLOQUEADOS
+    # ==========================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS participant_unlocked_exercises (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            participant_id INTEGER NOT NULL,
+
+            exercise_id INTEGER NOT NULL,
+
+            stars_spent INTEGER NOT NULL DEFAULT 0,
+
+            unlocked_date TIMESTAMP
+                DEFAULT CURRENT_TIMESTAMP,
+
+            UNIQUE (
+                participant_id,
+                exercise_id
+            ),
+
+            FOREIGN KEY (participant_id)
+                REFERENCES participants(id)
+
+        )
+    """)
 
     # ==========================================
     # COMPATIBILIDAD CON BASES EXISTENTES
@@ -702,3 +730,121 @@ def delete_session(session_id):
     finally:
 
         conn.close()
+# ==================================================
+# EJERCICIOS DESBLOQUEADOS Y ESTRELLAS USADAS
+# ==================================================
+
+def get_unlocked_exercises_by_participant(participant_id):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT exercise_id
+        FROM participant_unlocked_exercises
+        WHERE participant_id = ?
+        ORDER BY exercise_id ASC
+    """, (participant_id,))
+
+    exercise_ids = {1}
+
+    for row in cursor.fetchall():
+        exercise_ids.add(row[0])
+
+    conn.close()
+
+    return sorted(exercise_ids)
+
+
+def is_exercise_unlocked(participant_id, exercise_id):
+
+    if exercise_id == 1:
+        return True
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT 1
+        FROM participant_unlocked_exercises
+        WHERE participant_id = ?
+        AND exercise_id = ?
+        LIMIT 1
+    """, (
+        participant_id,
+        exercise_id
+    ))
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return result is not None
+
+
+def unlock_exercise_for_participant(
+    participant_id,
+    exercise_id,
+    stars_spent
+):
+
+    if exercise_id == 1:
+        return True
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            INSERT INTO participant_unlocked_exercises
+            (
+                participant_id,
+                exercise_id,
+                stars_spent,
+                unlocked_date
+            )
+            VALUES
+            (
+                ?, ?, ?, CURRENT_TIMESTAMP
+            )
+        """, (
+            participant_id,
+            exercise_id,
+            stars_spent
+        ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+
+        return False
+
+    finally:
+
+        conn.close()
+
+
+def get_total_spent_points_by_participant(participant_id):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(stars_spent), 0)
+        FROM participant_unlocked_exercises
+        WHERE participant_id = ?
+    """, (participant_id,))
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    if result is None:
+        return 0
+
+    return result[0]

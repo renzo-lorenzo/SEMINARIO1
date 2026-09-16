@@ -3,6 +3,8 @@ import streamlit as st
 from utils.ejercicios import (
     obtener_ejercicios,
     obtener_nombre_nivel,
+    obtener_costo_ejercicio,
+    obtener_nivel_actual_por_ejercicios,
     ejercicio_desbloqueado
 )
 
@@ -12,8 +14,122 @@ from components.exercise_video_preview import (
 
 from database.participant_repository import (
     get_exercise_repetitions,
-    set_exercise_repetitions
+    set_exercise_repetitions,
+    get_total_points_by_participant,
+    get_total_spent_points_by_participant,
+    get_unlocked_exercises_by_participant,
+    unlock_exercise_for_participant
 )
+
+def sincronizar_progreso_participante(participant_id):
+
+    puntos_guardados = get_total_points_by_participant(
+        participant_id
+    )
+
+    puntos_gastados = get_total_spent_points_by_participant(
+        participant_id
+    )
+
+    puntos_sesion_actual = sum(
+        ejercicio.get("puntos", 0)
+        for ejercicio in st.session_state.get(
+            "ejercicios_pendientes",
+            []
+        )
+    )
+
+    ejercicios_desbloqueados = get_unlocked_exercises_by_participant(
+        participant_id
+    )
+
+    puntos_ganados_total = (
+        puntos_guardados + puntos_sesion_actual
+    )
+
+    puntos_disponibles = max(
+        puntos_ganados_total - puntos_gastados,
+        0
+    )
+
+    st.session_state.puntos_ganados_total = puntos_ganados_total
+
+    st.session_state.puntos_guardados = puntos_guardados
+
+    st.session_state.puntos_sesion_actual = puntos_sesion_actual
+
+    st.session_state.puntos_gastados = puntos_gastados
+
+    st.session_state.puntos = puntos_disponibles
+
+    st.session_state.ejercicios_desbloqueados = ejercicios_desbloqueados
+
+    st.session_state.nivel = obtener_nivel_actual_por_ejercicios(
+        ejercicios_desbloqueados
+    )
+
+    return st.session_state.puntos, ejercicios_desbloqueados
+
+
+def mostrar_boton_desbloqueo_ejercicio(
+    participant_id,
+    ejercicio,
+    puntos_usuario,
+    ejercicios_desbloqueados
+):
+
+    if ejercicio_desbloqueado(
+        ejercicio,
+        ejercicios_desbloqueados
+    ):
+
+        return
+
+    costo_ejercicio = obtener_costo_ejercicio(
+        ejercicio
+    )
+
+    if puntos_usuario >= costo_ejercicio:
+
+        st.info(
+            f"Tienes {puntos_usuario} estrellas disponibles. "
+            f"Puedes desbloquear este ejercicio por {costo_ejercicio} estrellas."
+        )
+
+        if st.button(
+            f"🔓 Desbloquear por {costo_ejercicio} estrellas",
+            key=f"desbloquear_ejercicio_{ejercicio['id']}_{participant_id}",
+            use_container_width=True,
+            type="primary"
+        ):
+
+            desbloqueado = unlock_exercise_for_participant(
+                participant_id,
+                ejercicio["id"],
+                costo_ejercicio
+            )
+
+            if desbloqueado:
+
+                st.success(
+                    f"{ejercicio['nombre']} desbloqueado correctamente."
+                )
+
+                st.rerun()
+
+            else:
+
+                st.warning(
+                    "Este ejercicio ya fue desbloqueado anteriormente."
+                )
+
+    else:
+
+        puntos_faltantes = costo_ejercicio - puntos_usuario
+
+        st.warning(
+            f"Te faltan {puntos_faltantes} estrellas para desbloquear este ejercicio."
+        )
 
 
 def pantalla_mapa_niveles():
@@ -38,7 +154,9 @@ def pantalla_mapa_niveles():
 
     participant_id = st.session_state.participant_id
 
-    puntos_usuario = st.session_state.puntos
+    puntos_usuario, ejercicios_desbloqueados = sincronizar_progreso_participante(
+        participant_id
+    )
 
     ejercicios = obtener_ejercicios()
 
@@ -46,11 +164,12 @@ def pantalla_mapa_niveles():
         f"Participante: "
         f"{st.session_state.participant_name} "
         f"{st.session_state.participant_last_name} | "
-        f"Puntos: {puntos_usuario}"
+        f"Estrellas disponibles: {puntos_usuario} | "
+        f"Nivel máximo alcanzado: {st.session_state.nivel}"
     )
 
     # ==========================================
-    # NIVELES
+    # NIVELES SOLO COMO AGRUPACIÓN VISUAL
     # ==========================================
 
     for nivel in [1, 2, 3]:
@@ -77,7 +196,7 @@ def pantalla_mapa_niveles():
 
             desbloqueado = ejercicio_desbloqueado(
                 ejercicio,
-                puntos_usuario
+                ejercicios_desbloqueados
             )
 
             with columnas[index % 3]:
@@ -92,18 +211,10 @@ def pantalla_mapa_niveles():
                         f"🟢 {ejercicio['nombre']}"
                     )
 
-                    # ----------------------------------
-                    # VIDEO
-                    # ----------------------------------
-
                     mostrar_video_preview(
                         ejercicio["video"],
                         key=f"video_{ejercicio['id']}"
                     )
-
-                    # ----------------------------------
-                    # DESCRIPCIÓN
-                    # ----------------------------------
 
                     st.write(
                         ejercicio["descripcion"]
@@ -114,14 +225,8 @@ def pantalla_mapa_niveles():
                         f"{ejercicio['objetivo']}"
                     )
 
-                    # ----------------------------------
-                    # PUNTOS
-                    # ----------------------------------
-
                     st.caption(
-                        f"Requiere: "
-                        f"{ejercicio['puntos_requeridos']} "
-                        f"puntos"
+                        f"Ejercicio desbloqueado · Nivel {ejercicio['nivel_dificultad']}"
                     )
 
                     # ----------------------------------
@@ -239,28 +344,15 @@ def pantalla_mapa_niveles():
                         use_container_width=True
                     ):
 
-                        # ==========================================
-                        # GUARDAR EJERCICIO ACTUAL
-                        # ==========================================
-
                         ejercicio_actual = ejercicio.copy()
 
-                        # Usar la cantidad de repeticiones
-                        # configurada por la fisioterapeuta
                         ejercicio_actual["repeticiones_objetivo"] = repeticiones
 
                         st.session_state.ejercicio_actual = ejercicio_actual
 
-                        # También la dejamos disponible en session_state
                         st.session_state.repeticiones_objetivo = repeticiones
 
                         st.session_state.pantalla = "tutorial"
-
-                        st.rerun()
-
-                        st.session_state.pantalla = (
-                            "tutorial"
-                        )
 
                         st.rerun()
 
@@ -274,41 +366,25 @@ def pantalla_mapa_niveles():
                         f"🔒 {ejercicio['nombre']}"
                     )
 
-                    # ----------------------------------
-                    # VIDEO
-                    # ----------------------------------
-
                     mostrar_video_preview(
                         ejercicio["video"],
                         key=f"video_{ejercicio['id']}"
                     )
 
-                    # ----------------------------------
-                    # DESCRIPCIÓN
-                    # ----------------------------------
-
                     st.write(
                         ejercicio["descripcion"]
                     )
 
-                    # ----------------------------------
-                    # PUNTOS
-                    # ----------------------------------
-
                     st.caption(
-                        f"Requiere: "
-                        f"{ejercicio['puntos_requeridos']} "
-                        f"puntos"
+                        f"Nivel {ejercicio['nivel_dificultad']} · "
+                        f"Costo: {obtener_costo_ejercicio(ejercicio)} estrellas"
                     )
 
-                    puntos_faltantes = (
-                        ejercicio["puntos_requeridos"]
-                        - puntos_usuario
-                    )
-
-                    st.caption(
-                        f"Te faltan {puntos_faltantes} "
-                        f"puntos para desbloquearlo."
+                    mostrar_boton_desbloqueo_ejercicio(
+                        participant_id,
+                        ejercicio,
+                        puntos_usuario,
+                        ejercicios_desbloqueados
                     )
 
         st.divider()

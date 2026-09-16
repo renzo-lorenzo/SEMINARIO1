@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from database.participant_repository import (
     get_session_count,
     get_total_points_by_participant,
+    get_total_spent_points_by_participant,
+    get_unlocked_exercises_by_participant,
     register_session_with_exercises,
     cancel_last_session,
     get_session_history,
@@ -15,8 +17,9 @@ from database.participant_repository import (
 from database.participant_repository import get_session_exercises
 from utils.ejercicios import (
     obtener_ejercicios,
-    calcular_nivel_por_puntos,
-    calcular_progreso_mapa,
+    obtener_costo_ejercicio,
+    obtener_nivel_actual_por_ejercicios,
+    calcular_progreso_mapa_por_ejercicios,
     obtener_siguiente_ejercicio_bloqueado
 )
 
@@ -55,28 +58,47 @@ def convertir_hora_peru(session_date):
 @st.dialog("Registrar sesión")
 def confirmar_registro_sesion(participant_id):
 
-    ejercicios_pendientes = (
-        st.session_state.get(
-            "ejercicios_pendientes",
-            []
+    ejercicios_pendientes = st.session_state.get(
+        "ejercicios_pendientes",
+        []
+    )
+
+    if not ejercicios_pendientes:
+
+        st.warning(
+            "Todavía no hay ejercicios por registrar. "
+            "Primero realiza al menos un ejercicio."
         )
+
+        if st.button(
+            "Entendido",
+            use_container_width=True
+        ):
+
+            st.rerun()
+
+        return
+
+    total_estrellas_pendientes = sum(
+        ejercicio.get("puntos", 0)
+        for ejercicio in ejercicios_pendientes
     )
 
     st.write(
-        "¿Está seguro de que desea registrar esta sesión "
-        "para este participante?"
+        "¿Deseas registrar la sesión actual?"
+    )
+
+    st.info(
+        f"Se guardarán **{len(ejercicios_pendientes)} ejercicio(s)** "
+        f"y **{total_estrellas_pendientes} estrella(s)**."
     )
 
     st.write(
-        f"Ejercicios realizados en esta sesión: "
-        f"**{len(ejercicios_pendientes)}**"
+        "Al registrar la sesión, las estrellas obtenidas pasarán "
+        "a estar disponibles para desbloquear nuevos ejercicios."
     )
 
-    st.write(
-        "Al registrar la sesión, todos los ejercicios "
-        "realizados hasta este momento quedarán guardados "
-        "en el historial."
-    )
+    st.divider()
 
     col1, col2 = st.columns(2)
 
@@ -92,28 +114,21 @@ def confirmar_registro_sesion(participant_id):
     with col2:
 
         if st.button(
-            "Sí, registrar",
+            "Sí, registrar sesión",
             type="primary",
             use_container_width=True
         ):
-
-            # ==========================================
-            # REGISTRAR SESIÓN + EJERCICIOS
-            # ==========================================
 
             register_session_with_exercises(
                 participant_id,
                 ejercicios_pendientes
             )
 
-            # ==========================================
-            # LIMPIAR EJERCICIOS DE LA SESIÓN ACTUAL
-            # ==========================================
-
             st.session_state.ejercicios_pendientes = []
 
             st.success(
-                "Sesión registrada correctamente."
+                "Sesión registrada correctamente. "
+                "Las estrellas ya están disponibles."
             )
 
             st.rerun()
@@ -476,7 +491,11 @@ def mostrar_dashboard_stats():
         participant_id
     )
 
-    puntos_pendientes = sum(
+    puntos_gastados = get_total_spent_points_by_participant(
+        participant_id
+    )
+
+    puntos_sesion_actual = sum(
         ejercicio.get("puntos", 0)
         for ejercicio in st.session_state.get(
             "ejercicios_pendientes",
@@ -484,26 +503,46 @@ def mostrar_dashboard_stats():
         )
     )
 
-    st.session_state.puntos = (
-        puntos_guardados + puntos_pendientes
+    ejercicios_desbloqueados = get_unlocked_exercises_by_participant(
+        participant_id
     )
 
-    st.session_state.nivel = calcular_nivel_por_puntos(
-        st.session_state.puntos
+    puntos_ganados_total = (
+        puntos_guardados + puntos_sesion_actual
     )
 
-    desbloqueados, total_ejercicios, progreso_mapa = calcular_progreso_mapa(
-        st.session_state.puntos
+    puntos_disponibles = max(
+        puntos_ganados_total - puntos_gastados,
+        0
+    )
+
+    st.session_state.puntos_ganados_total = puntos_ganados_total
+
+    st.session_state.puntos_guardados = puntos_guardados
+
+    st.session_state.puntos_sesion_actual = puntos_sesion_actual
+
+    st.session_state.puntos_gastados = puntos_gastados
+
+    st.session_state.puntos = puntos_disponibles
+
+    st.session_state.ejercicios_desbloqueados = ejercicios_desbloqueados
+
+    st.session_state.nivel = obtener_nivel_actual_por_ejercicios(
+        ejercicios_desbloqueados
+    )
+
+    desbloqueados, total_ejercicios, progreso_mapa = calcular_progreso_mapa_por_ejercicios(
+        ejercicios_desbloqueados
     )
 
     siguiente_ejercicio = obtener_siguiente_ejercicio_bloqueado(
-        st.session_state.puntos
+        ejercicios_desbloqueados
     )
 
     grados_progreso = int(
         (progreso_mapa / 100) * 360
     )
-
 
     # ==================================================
     # COLUMNAS PRINCIPALES
@@ -532,12 +571,16 @@ def mostrar_dashboard_stats():
             # ESTRELLAS
             # ==========================================
 
-            st.markdown("### ⭐ Estrellas")
+            st.markdown("### ⭐ Estrellas disponibles")
 
             st.markdown(
                 f"## {st.session_state.puntos}"
             )
 
+            st.caption(
+                f"Ganadas: {st.session_state.puntos_ganados_total} · "
+                f"Usadas: {st.session_state.puntos_gastados}"
+            )
 
             # ==========================================
             # NIVEL
@@ -692,15 +735,28 @@ def mostrar_dashboard_stats():
 
         if siguiente_ejercicio:
 
-            puntos_faltantes = (
-                siguiente_ejercicio["puntos_requeridos"]
-                - st.session_state.puntos
+            costo_siguiente_ejercicio = obtener_costo_ejercicio(
+                siguiente_ejercicio
             )
 
-            st.info(
-                f"Te faltan {puntos_faltantes} puntos para desbloquear: "
-                f"{siguiente_ejercicio['nombre']}."
+            puntos_faltantes = max(
+                costo_siguiente_ejercicio - st.session_state.puntos,
+                0
             )
+
+            if puntos_faltantes > 0:
+
+                st.info(
+                    f"Te faltan {puntos_faltantes} estrellas para desbloquear: "
+                    f"{siguiente_ejercicio['nombre']}."
+                )
+
+            else:
+
+                st.success(
+                    f"Ya puedes desbloquear: {siguiente_ejercicio['nombre']} "
+                    "desde el mapa de ejercicios."
+                )
 
         else:
 

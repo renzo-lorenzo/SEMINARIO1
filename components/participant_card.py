@@ -2,10 +2,12 @@ import streamlit as st
 
 from database.participant_repository import (
     delete_participant,
-    get_total_points_by_participant
+    get_total_points_by_participant,
+    get_total_spent_points_by_participant,
+    get_unlocked_exercises_by_participant
 )
 
-from utils.ejercicios import calcular_nivel_por_puntos
+from utils.ejercicios import obtener_nivel_actual_por_ejercicios
 
 
 def mostrar_tarjeta_participante(participante):
@@ -54,16 +56,33 @@ def mostrar_tarjeta_participante(participante):
                 st.session_state.nombre = nombre
                 st.session_state.edad = edad
 
-                puntos_acumulados = get_total_points_by_participant(
+                puntos_ganados = get_total_points_by_participant(
                     participante["id"]
                 )
 
-                st.session_state.puntos = puntos_acumulados
-
-                st.session_state.nivel = calcular_nivel_por_puntos(
-                    puntos_acumulados
+                puntos_gastados = get_total_spent_points_by_participant(
+                    participante["id"]
                 )
 
+                ejercicios_desbloqueados = get_unlocked_exercises_by_participant(
+                    participante["id"]
+                )
+
+                st.session_state.puntos_ganados_total = puntos_ganados
+
+                st.session_state.puntos_gastados = puntos_gastados
+
+                st.session_state.puntos = max(
+                    puntos_ganados - puntos_gastados,
+                    0
+                )
+
+                st.session_state.ejercicios_desbloqueados = ejercicios_desbloqueados
+
+                st.session_state.nivel = obtener_nivel_actual_por_ejercicios(
+                    ejercicios_desbloqueados
+                )
+                
                 st.session_state.ejercicios_pendientes = []
 
                 st.session_state.voz_bienvenida_pendiente = True

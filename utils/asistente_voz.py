@@ -313,7 +313,7 @@ def hablar_fin_ejercicio_si_corresponde():
     )
 
     texto = (
-        f"Rutina completada. Ganaste {puntos} puntos. "
+        f"Rutina completada. Ganaste {puntos} estrellas. "
         "Puedes descansar unos segundos antes de continuar."
     )
 

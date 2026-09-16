@@ -108,6 +108,12 @@ def puntos_iniciales_por_experiencia(experiencia):
         return 280
     return 0
 
+# ==================================================
+# DESBLOQUEO MANUAL POR EJERCICIO
+# ==================================================
+
+EJERCICIOS_INICIALES_DESBLOQUEADOS = [1]
+
 
 def obtener_nombre_nivel(nivel):
     nombres = {
@@ -115,44 +121,59 @@ def obtener_nombre_nivel(nivel):
         2: "Nivel 2: Control y estabilidad",
         3: "Nivel 3: Fuerza funcional",
     }
+
     return nombres.get(nivel, "Nivel desconocido")
 
 
-def ejercicio_desbloqueado(ejercicio, puntos_usuario):
-    return puntos_usuario >= ejercicio["puntos_requeridos"]
+def obtener_costo_ejercicio(ejercicio):
+    return ejercicio.get("puntos_requeridos", 0)
 
-def calcular_nivel_por_puntos(puntos):
 
-    if puntos >= 340:
-        return 3
-
-    if puntos >= 140:
-        return 2
-
-    return 1
-
-def obtener_ejercicios_desbloqueados(puntos):
+def obtener_ejercicio_por_id(exercise_id):
     ejercicios = obtener_ejercicios()
 
-    ejercicios_desbloqueados = [
+    for ejercicio in ejercicios:
+        if ejercicio["id"] == exercise_id:
+            return ejercicio
+
+    return None
+
+
+def ejercicio_desbloqueado(
+    ejercicio,
+    ejercicios_desbloqueados
+):
+
+    return ejercicio["id"] in ejercicios_desbloqueados
+
+
+def obtener_ejercicios_desbloqueados_por_id(
+    ejercicios_desbloqueados
+):
+
+    ejercicios = obtener_ejercicios()
+
+    return [
         ejercicio
         for ejercicio in ejercicios
-        if puntos >= ejercicio["puntos_requeridos"]
+        if ejercicio_desbloqueado(
+            ejercicio,
+            ejercicios_desbloqueados
+        )
     ]
 
-    return ejercicios_desbloqueados
 
+def calcular_progreso_mapa_por_ejercicios(
+    ejercicios_desbloqueados
+):
 
-def calcular_progreso_mapa(puntos):
     ejercicios = obtener_ejercicios()
     total_ejercicios = len(ejercicios)
 
-    ejercicios_desbloqueados = obtener_ejercicios_desbloqueados(
-        puntos
-    )
-
     cantidad_desbloqueados = len(
-        ejercicios_desbloqueados
+        obtener_ejercicios_desbloqueados_por_id(
+            ejercicios_desbloqueados
+        )
     )
 
     if total_ejercicios == 0:
@@ -165,21 +186,56 @@ def calcular_progreso_mapa(puntos):
     return cantidad_desbloqueados, total_ejercicios, porcentaje
 
 
-def obtener_siguiente_ejercicio_bloqueado(puntos):
+def obtener_nivel_actual_por_ejercicios(
+    ejercicios_desbloqueados
+):
+
+    ejercicios = obtener_ejercicios_desbloqueados_por_id(
+        ejercicios_desbloqueados
+    )
+
+    if not ejercicios:
+        return 1
+
+    return max(
+        ejercicio["nivel_dificultad"]
+        for ejercicio in ejercicios
+    )
+
+
+def obtener_ejercicios_bloqueados(
+    ejercicios_desbloqueados
+):
+
     ejercicios = obtener_ejercicios()
 
-    ejercicios_bloqueados = [
+    return [
         ejercicio
         for ejercicio in ejercicios
-        if puntos < ejercicio["puntos_requeridos"]
+        if not ejercicio_desbloqueado(
+            ejercicio,
+            ejercicios_desbloqueados
+        )
     ]
+
+
+def obtener_siguiente_ejercicio_bloqueado(
+    ejercicios_desbloqueados
+):
+
+    ejercicios_bloqueados = obtener_ejercicios_bloqueados(
+        ejercicios_desbloqueados
+    )
 
     if not ejercicios_bloqueados:
         return None
 
     ejercicios_bloqueados = sorted(
         ejercicios_bloqueados,
-        key=lambda ejercicio: ejercicio["puntos_requeridos"]
+        key=lambda ejercicio: ejercicio.get(
+            "puntos_requeridos",
+            0
+        )
     )
 
     return ejercicios_bloqueados[0]

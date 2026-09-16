@@ -53,6 +53,15 @@ if "puntos" not in st.session_state:
 if "nivel" not in st.session_state:
     st.session_state.nivel = 1
 
+if "ejercicios_desbloqueados" not in st.session_state:
+    st.session_state.ejercicios_desbloqueados = [1]
+
+if "puntos_ganados_total" not in st.session_state:
+    st.session_state.puntos_ganados_total = 0
+
+if "puntos_gastados" not in st.session_state:
+    st.session_state.puntos_gastados = 0
+
 inicializar_asistente_voz()
 
 if not st.session_state.logged_in:
