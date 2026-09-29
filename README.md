@@ -1,11 +1,12 @@
 REQUISITOS:
-- Python 3.11 (SOLO ESE ME FUNCIONA A MI)
-- MediaPipe 0.10.35 (Ese calcula postura)
-- OpenCV
-- Streamlit
+- Python 3.11 
+- MediaPipe 0.10.35 
+- OpenCV 4.13.0.92
+- Streamlit 1.57.0
+- NumPy 2.3.3
 
 
-PowerShell o GitBash pon esto muñaño:
+PowerShell o GitBash:
 -     git clone https://github.com/renzo-lorenzo/SEMINARIO1.git
 -     cd SEMINARIO1
 
@@ -13,7 +14,7 @@ PowerShell o GitBash pon esto muñaño:
 Dentro de la carpeta SEMINARIO01 pon esto:
 -     py -3.11 -m venv venv
 -     .\venv\Scripts\activate
-Te debera salir una vaina asi "(venv) PS C:\...\SEMINARIO1>"
+debera salir asi "(venv) PS C:\...\SEMINARIO1>"
 
 
 Ahora ejecuta esto:
