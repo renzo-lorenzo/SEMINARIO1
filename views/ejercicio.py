@@ -58,18 +58,69 @@ def registrar_resultado_temporal(
     repeticiones,
     estrellas_ganadas,
     tiempo_actual,
-    resultado
+    resultado,
+    intentos_no_completados=0,
+    mejor_racha=0,
+    indicaciones_sistema=0,
+    angulo_minimo=None,
+    angulo_maximo=None,
+    historial_intentos=None
 ):
+    if historial_intentos is None:
+        historial_intentos = []
+
     """
     Guarda el ejercicio en una lista temporal para que luego pueda
     aparecer en el historial cuando se registre la sesión desde el dashboard.
     Las estrellas se suman de inmediato a la interfaz.
     """
 
+    intentos_totales = (
+        repeticiones
+        + intentos_no_completados
+    )
+
+    if intentos_totales > 0:
+
+        efectividad_intentos = round(
+            (
+                repeticiones
+                / intentos_totales
+            )
+            * 100
+        )
+
+    else:
+
+        efectividad_intentos = 0
+
+
+    # Limpiar valores angulares en caso
+    # de que no se haya obtenido medición.
+
+    if angulo_minimo == 999:
+        angulo_minimo = None
+
+    if angulo_maximo == 0:
+        angulo_maximo = None
+
     if "ejercicios_pendientes" not in st.session_state:
         st.session_state.ejercicios_pendientes = []
 
     resultado_ejercicio = {
+        "historial_intentos": historial_intentos.copy(),
+
+        "intentos_no_completados": intentos_no_completados,
+
+        "efectividad_intentos": efectividad_intentos,
+
+        "mejor_racha": mejor_racha,
+
+        "indicaciones_sistema": indicaciones_sistema,
+
+        "angulo_minimo": angulo_minimo,
+
+        "angulo_maximo": angulo_maximo,
         "ejercicio_id": ejercicio["id"],
         "nombre": ejercicio["nombre"],
         "repeticiones_objetivo": total_repeticiones,
@@ -99,6 +150,42 @@ def registrar_resultado_temporal(
     st.session_state.puntos_ganados_ultimo = estrellas_ganadas
 
     st.session_state.tiempo_ultimo_ejercicio = tiempo_actual
+
+    st.session_state.intentos_ultimo_ejercicio = (
+    intentos_no_completados
+    )
+
+    st.session_state.efectividad_ultimo_ejercicio = (
+        efectividad_intentos
+    )
+
+    st.session_state.mejor_racha_ultimo_ejercicio = (
+        mejor_racha
+    )
+
+    st.session_state.indicaciones_ultimo_ejercicio = (
+        indicaciones_sistema
+    )
+
+    st.session_state.angulo_minimo_ultimo_ejercicio = (
+        angulo_minimo
+    )
+
+    st.session_state.angulo_maximo_ultimo_ejercicio = (
+        angulo_maximo
+    )
+
+    st.session_state.repeticiones_ultimo_ejercicio = repeticiones
+
+    st.session_state.objetivo_ultimo_ejercicio = total_repeticiones
+
+    st.session_state.resultado_ultimo_ejercicio = resultado
+
+    st.session_state.historial_intentos_ultimo_ejercicio = (
+        historial_intentos.copy()
+    )
+
+
 
 
 # ==========================================================
@@ -166,6 +253,15 @@ def pantalla_ejercicio():
     if "tiempo_ultimo_ejercicio" not in st.session_state:
         st.session_state.tiempo_ultimo_ejercicio = 0
 
+    if "repeticiones_ultimo_ejercicio" not in st.session_state:
+        st.session_state.repeticiones_ultimo_ejercicio = 0
+
+    if "objetivo_ultimo_ejercicio" not in st.session_state:
+        st.session_state.objetivo_ultimo_ejercicio = 0
+
+    if "resultado_ultimo_ejercicio" not in st.session_state:
+        st.session_state.resultado_ultimo_ejercicio = ""
+
     if "ejercicios_pendientes" not in st.session_state:
         st.session_state.ejercicios_pendientes = []
 
@@ -184,6 +280,11 @@ def pantalla_ejercicio():
         ejercicio.get("repeticiones_objetivo", 10)
     )
 
+    duracion_configurada = st.session_state.get(
+        "duracion_objetivo_segundos",
+        ejercicio.get("duracion_objetivo_segundos", 60)
+    )
+
     # ======================================================
     # PANTALLA FINAL
     # ======================================================
@@ -199,49 +300,88 @@ def pantalla_ejercicio():
 
         st.markdown(
             '<div class="subtitle">'
-            'Rutina finalizada'
+            'Ejercicio finalizado'
             '</div>',
             unsafe_allow_html=True
         )
 
-        st.success(
-            "Rutina finalizada correctamente."
-        )
+        resultado_final = st.session_state.resultado_ultimo_ejercicio
 
-        st.info(
-            f"Ganaste +{st.session_state.puntos_ganados_ultimo} estrellas. "
-            f"Ahora tienes {st.session_state.puntos} estrellas disponibles. "
-            "Recuerda registrar la sesión al finalizar para guardar el historial."
-        )
+        if resultado_final == "Tiempo máximo":
+
+            st.info(
+                "El tiempo configurado ha finalizado."
+            )
+
+        elif resultado_final == "Detenido":
+
+            st.warning(
+                "El ejercicio fue detenido antes de finalizar."
+            )
 
         # --------------------------------------------------
         # RESULTADOS FINALES
         # --------------------------------------------------
 
-        col_p1, col_p2, col_p3 = st.columns(3)
+        repeticiones_realizadas = (
+            st.session_state.repeticiones_ultimo_ejercicio
+        )
+
+        repeticiones_objetivo = (
+            st.session_state.objetivo_ultimo_ejercicio
+        )
+
+        if repeticiones_objetivo > 0:
+
+            porcentaje_cumplimiento = round(
+                (
+                    repeticiones_realizadas
+                    / repeticiones_objetivo
+                )
+                * 100
+            )
+
+        else:
+
+            porcentaje_cumplimiento = 0
+
+
+        tiempo_total = (
+            st.session_state.tiempo_ultimo_ejercicio
+        )
+
+        minutos = tiempo_total // 60
+        segundos = tiempo_total % 60
+
+
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+
 
         with col_p1:
 
             st.metric(
-                "Estrellas ganadas",
-                st.session_state.puntos_ganados_ultimo
+                "Repeticiones válidas",
+                f"{repeticiones_realizadas}/{repeticiones_objetivo}"
             )
+
 
         with col_p2:
 
             st.metric(
-                "Estrellas disponibles",
-                st.session_state.puntos
+                "Cumplimiento",
+                f"{porcentaje_cumplimiento}%"
             )
+
 
         with col_p3:
 
-            tiempo_total = (
-                st.session_state.tiempo_ultimo_ejercicio
+            st.metric(
+                "Estrellas ganadas",
+                f"{st.session_state.puntos_ganados_ultimo} ⭐"
             )
 
-            minutos = tiempo_total // 60
-            segundos = tiempo_total % 60
+
+        with col_p4:
 
             st.metric(
                 "Tiempo",
@@ -249,6 +389,132 @@ def pantalla_ejercicio():
             )
 
         st.write("")
+
+        st.markdown("### Tu desempeño")
+
+        tipo_evaluacion = ejercicio.get(
+            "tipo_evaluacion",
+            ""
+        )
+
+        col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+
+        with col_d1:
+
+            st.metric(
+                "Intentos adicionales",
+                st.session_state.get(
+                    "intentos_ultimo_ejercicio",
+                    0
+                )
+            )
+
+        with col_d2:
+
+            efectividad = st.session_state.get(
+                "efectividad_ultimo_ejercicio",
+                0
+            )
+
+            st.metric(
+                "Efectividad",
+                f"{efectividad}%"
+            )
+
+        with col_d3:
+
+            st.metric(
+                "Mejor racha",
+                st.session_state.get(
+                    "mejor_racha_ultimo_ejercicio",
+                    0
+                )
+            )
+
+        with col_d4:
+
+            st.metric(
+                "Indicaciones",
+                st.session_state.get(
+                    "indicaciones_ultimo_ejercicio",
+                    0
+                )
+            )
+
+        # --------------------------------------------------
+        # SECUENCIA VISUAL
+        # --------------------------------------------------
+
+        historial = st.session_state.get(
+            "historial_intentos_ultimo_ejercicio",
+            []
+        )
+
+        if historial:
+
+            st.markdown(
+                "#### Secuencia de intentos"
+            )
+
+            secuencia_visual = " ".join(
+                historial
+            )
+
+            st.markdown(
+                f"""
+                <div style="
+                    font-size: 30px;
+                    letter-spacing: 5px;
+                    margin-top: 5px;
+                    margin-bottom: 8px;
+                ">
+                    {secuencia_visual}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            st.caption(
+                "✅ Repetición completada · "
+                "❌ Intento adicional"
+            )
+
+        # --------------------------------------------------
+        # DETALLES DEL EJERCICIO
+        # --------------------------------------------------
+
+        with st.expander(
+            "Ver más detalles del ejercicio"
+        ):
+
+            angulo_min = st.session_state.get(
+                "angulo_minimo_ultimo_ejercicio"
+            )
+
+            angulo_max = st.session_state.get(
+                "angulo_maximo_ultimo_ejercicio"
+            )
+
+            if (
+                angulo_min is not None
+                and angulo_max is not None
+            ):
+
+                st.write(
+                    "**Rango angular observado:** "
+                    f"{round(angulo_min, 1)}° "
+                    f"– {round(angulo_max, 1)}°"
+                )
+
+            resultado_final = st.session_state.get(
+                "resultado_ultimo_ejercicio",
+                "-"
+            )
+
+            st.write(
+                "**Motivo de finalización:** "
+                f"{resultado_final}"
+            )
 
         # --------------------------------------------------
         # BOTONES
@@ -265,9 +531,7 @@ def pantalla_ejercicio():
             ):
 
                 st.session_state.ejercicio_activo = False
-
                 st.session_state.ejercicio_completado = False
-
                 st.session_state.pantalla = "mapa"
 
                 st.rerun()
@@ -281,14 +545,13 @@ def pantalla_ejercicio():
             ):
 
                 st.session_state.ejercicio_activo = False
-
                 st.session_state.ejercicio_completado = False
-
                 st.session_state.pantalla = "dashboard"
 
                 st.rerun()
 
         return
+
 
     # ======================================================
     # ENCABEZADO
@@ -404,6 +667,21 @@ def pantalla_ejercicio():
 
     estrellas_ganadas = 0
 
+    # Métricas de desempeño
+    intentos_no_completados = 0
+
+    racha_actual = 0
+
+    mejor_racha = 0
+
+    historial_intentos = []
+
+    # Indicaciones generadas por problemas
+    # de posición o detección
+    indicaciones_sistema = 0
+
+    incidencia_deteccion_activa = False
+
     # ======================================================
     # ESTADO DE EVALUACIÓN
     # ======================================================
@@ -428,7 +706,10 @@ def pantalla_ejercicio():
 
     tiempo_inicio = time.time()
 
-    duracion_maxima = 300
+    duracion_maxima = max(
+        int(duracion_configurada),
+        10
+    )
 
     # ======================================================
     # BOTÓN DETENER
@@ -554,6 +835,20 @@ def pantalla_ejercicio():
 
                 if puntos_pierna is None:
 
+                    # Solo contamos una nueva incidencia
+                    # cuando comienza el problema.
+                    # Dejamos 2 segundos iniciales de gracia.
+
+                    if (
+                        not incidencia_deteccion_activa
+                        and
+                        time.time() - tiempo_inicio >= 2
+                    ):
+
+                        indicaciones_sistema += 1
+
+                        incidencia_deteccion_activa = True
+
                     mensaje = (
                         "No se detectan correctamente "
                         "los puntos corporales necesarios. "
@@ -571,6 +866,12 @@ def pantalla_ejercicio():
                 # ------------------------------------------
 
                 else:
+
+                    # El problema de detección ya se solucionó.
+                    # Si vuelve a ocurrir después, contará
+                    # como una nueva indicación.
+
+                    incidencia_deteccion_activa = False
 
                     punto_cadera = (
                         puntos_pierna["cadera"]
@@ -637,6 +938,27 @@ def pantalla_ejercicio():
                         )
                     )
 
+                    # --------------------------------------
+                    # INTENTO NO COMPLETADO
+                    # --------------------------------------
+
+                    if estado_eval.get(
+                        "intento_no_completado_evento",
+                        False
+                    ):
+
+                        intentos_no_completados += 1
+
+                        # Una racha termina cuando hubo
+                        # un intento que no se completó.
+                        racha_actual = 0
+
+                        historial_intentos.append("❌")
+
+                        estado_eval[
+                            "intento_no_completado_evento"
+                        ] = False
+
                     estado_movimiento = (
                         estado_eval["fase"]
                     )
@@ -650,6 +972,20 @@ def pantalla_ejercicio():
                         repeticiones += 1
 
                         estrellas_ganadas += 10
+                        
+
+                        # ----------------------------------
+                        # RACHA
+                        # ----------------------------------
+
+                        racha_actual += 1
+
+                        mejor_racha = max(
+                            mejor_racha,
+                            racha_actual
+                        )
+
+                        historial_intentos.append("✅")
 
                         hablar_repeticion(
                             repeticiones,
@@ -658,6 +994,16 @@ def pantalla_ejercicio():
                         )
 
             else:
+
+                if (
+                    not incidencia_deteccion_activa
+                    and
+                    time.time() - tiempo_inicio >= 2
+                ):
+
+                    indicaciones_sistema += 1
+
+                    incidencia_deteccion_activa = True
 
                 mensaje = (
                     "No se detectó la postura. "
@@ -748,7 +1094,12 @@ def pantalla_ejercicio():
                     "### Resultados"
                 )
 
-                col1, col2 = st.columns(2)
+                tiempo_restante = max(
+                    duracion_maxima - tiempo_actual,
+                    0
+                )
+
+                col1, col2, col3 = st.columns(3)
 
                 with col1:
 
@@ -762,6 +1113,13 @@ def pantalla_ejercicio():
                     st.metric(
                         "Estrellas",
                         estrellas_ganadas
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "Tiempo restante",
+                        f"{tiempo_restante} s"
                     )
 
                 st.progress(
@@ -812,7 +1170,8 @@ def pantalla_ejercicio():
                 )
 
                 st.caption(
-                    f"Tiempo: {minutos} min {segundos} s"
+                    f"Tiempo transcurrido: {minutos} min {segundos} s "
+                    f"de {duracion_maxima} s configurados"
                 )
 
             # ==================================================
@@ -827,7 +1186,13 @@ def pantalla_ejercicio():
                     repeticiones=repeticiones,
                     estrellas_ganadas=estrellas_ganadas,
                     tiempo_actual=tiempo_actual,
-                    resultado="Completado"
+                    resultado="Completado",
+                    intentos_no_completados=intentos_no_completados,
+                    mejor_racha=mejor_racha,
+                    indicaciones_sistema=indicaciones_sistema,
+                    angulo_minimo=angulo_minimo,
+                    angulo_maximo=angulo_maximo,
+                    historial_intentos=historial_intentos
                 )
 
                 st.session_state.ejercicio_activo = False
@@ -858,7 +1223,13 @@ def pantalla_ejercicio():
                     repeticiones=repeticiones,
                     estrellas_ganadas=estrellas_ganadas,
                     tiempo_actual=tiempo_actual,
-                    resultado="Tiempo máximo"
+                    resultado="Tiempo máximo",
+                    intentos_no_completados=intentos_no_completados,
+                    mejor_racha=mejor_racha,
+                    indicaciones_sistema=indicaciones_sistema,
+                    angulo_minimo=angulo_minimo,
+                    angulo_maximo=angulo_maximo,
+                    historial_intentos=historial_intentos
                 )
 
                 st.session_state.ejercicio_activo = False
@@ -883,7 +1254,13 @@ def pantalla_ejercicio():
                     repeticiones=repeticiones,
                     estrellas_ganadas=estrellas_ganadas,
                     tiempo_actual=tiempo_actual,
-                    resultado="Detenido"
+                    resultado="Detenido",
+                    intentos_no_completados=intentos_no_completados,
+                    mejor_racha=mejor_racha,
+                    indicaciones_sistema=indicaciones_sistema,
+                    angulo_minimo=angulo_minimo,
+                    angulo_maximo=angulo_maximo,
+                    historial_intentos=historial_intentos
                 )
 
                 st.session_state.ejercicio_activo = False
@@ -947,5 +1324,6 @@ def pantalla_ejercicio():
             st.session_state.ejercicio_activo = False
 
             st.session_state.pantalla = "dashboard"
+
 
             st.rerun()

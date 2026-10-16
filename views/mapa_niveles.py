@@ -15,6 +15,8 @@ from components.exercise_video_preview import (
 from database.participant_repository import (
     get_exercise_repetitions,
     set_exercise_repetitions,
+    get_exercise_duration,
+    set_exercise_duration,
     get_total_points_by_participant,
     get_total_spent_points_by_participant,
     get_unlocked_exercises_by_participant,
@@ -316,6 +318,104 @@ def pantalla_mapa_niveles():
                             st.rerun()
 
                     # ----------------------------------
+                    # TIEMPO MÁXIMO
+                    # ----------------------------------
+
+                    duracion_maxima = get_exercise_duration(
+                        participant_id,
+                        ejercicio["id"],
+                        ejercicio.get(
+                            "duracion_objetivo_segundos",
+                            60
+                        )
+                    )
+
+                    st.markdown(
+                        """
+                        <div style="
+                            text-align: center;
+                            font-size: 18px;
+                            font-weight: 600;
+                            margin-top: 14px;
+                            margin-bottom: 5px;
+                        ">
+                            Tiempo máximo (segundos)
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    col_tminus, col_tvalue, col_tplus = (
+                        st.columns([1, 1.5, 1])
+                    )
+
+                    with col_tminus:
+
+                        if st.button(
+                            "−5",
+                            key=(
+                                f"time_minus_"
+                                f"{participant_id}_"
+                                f"{ejercicio['id']}"
+                            ),
+                            use_container_width=True
+                        ):
+
+                            nueva_duracion = max(
+                                10,
+                                duracion_maxima - 5
+                            )
+
+                            set_exercise_duration(
+                                participant_id,
+                                ejercicio["id"],
+                                nueva_duracion
+                            )
+
+                            st.rerun()
+
+                    with col_tvalue:
+
+                        st.markdown(
+                            f"""
+                            <div style="
+                                text-align: center;
+                                font-size: 26px;
+                                font-weight: 700;
+                                padding: 5px;
+                            ">
+                                {duracion_maxima}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                    with col_tplus:
+
+                        if st.button(
+                            "+5",
+                            key=(
+                                f"time_plus_"
+                                f"{participant_id}_"
+                                f"{ejercicio['id']}"
+                            ),
+                            use_container_width=True
+                        ):
+
+                            nueva_duracion = min(
+                                600,
+                                duracion_maxima + 5
+                            )
+
+                            set_exercise_duration(
+                                participant_id,
+                                ejercicio["id"],
+                                nueva_duracion
+                            )
+
+                            st.rerun()
+
+                    # ----------------------------------
                     # INICIAR EJERCICIO
                     # ----------------------------------
 
@@ -334,10 +434,38 @@ def pantalla_mapa_niveles():
                         ejercicio_actual = ejercicio.copy()
 
                         ejercicio_actual["repeticiones_objetivo"] = repeticiones
+                        ejercicio_actual["duracion_objetivo_segundos"] = duracion_maxima
 
                         st.session_state.ejercicio_actual = ejercicio_actual
 
                         st.session_state.repeticiones_objetivo = repeticiones
+                        st.session_state.duracion_objetivo_segundos = duracion_maxima
+
+                        # ==================================================
+                        # REINICIAR ESTADO DE UNA NUEVA EJECUCIÓN
+                        # ==================================================
+
+                        st.session_state.ejercicio_completado = False
+                        st.session_state.ejercicio_activo = True
+
+                        st.session_state.voz_fin_ejercicio_pendiente = False
+
+                        st.session_state.puntos_ganados_ultimo = 0
+                        st.session_state.tiempo_ultimo_ejercicio = 0
+
+                        st.session_state.repeticiones_ultimo_ejercicio = 0
+                        st.session_state.objetivo_ultimo_ejercicio = 0
+                        st.session_state.resultado_ultimo_ejercicio = ""
+
+                        st.session_state.intentos_ultimo_ejercicio = 0
+                        st.session_state.efectividad_ultimo_ejercicio = 0
+                        st.session_state.mejor_racha_ultimo_ejercicio = 0
+                        st.session_state.indicaciones_ultimo_ejercicio = 0
+
+                        st.session_state.angulo_minimo_ultimo_ejercicio = None
+                        st.session_state.angulo_maximo_ultimo_ejercicio = None
+
+                        st.session_state.historial_intentos_ultimo_ejercicio = []
 
                         st.session_state.pantalla = "tutorial"
 

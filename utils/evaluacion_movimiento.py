@@ -87,252 +87,1349 @@ def dibujar_solo_pierna(frame, puntos, angulo_actual):
 
 
 def inicializar_estado_evaluacion():
+
     return {
+
         "fase": "inicio",
+
         "base_tobillo_y": None,
         "base_tobillo_x": None,
         "base_cadera_y": None,
         "base_rodilla_y": None,
-        "ultimo_tick": time.time(),
-        "tiempo_estable": 0,
+
+        # Control de estabilidad de las fases
+        "fase_candidata": None,
+        "fase_candidata_desde": None,
+
+        # Control de intentos
+        "intento_activo": False,
+        "intento_candidato_desde": None,
+        "intento_no_completado_evento": False,
+        "angulo_max_intento": None,
     }
 
+def confirmar_fase_estable(
+    estado_eval,
+    fase_candidata,
+    duracion_minima=0.30
+):
+    """
+    Confirma una fase solamente si la condición
+    se mantiene durante un tiempo mínimo.
+
+    Esto ayuda a evitar falsos positivos producidos
+    por cambios momentáneos de MediaPipe.
+    """
+
+    ahora = time.time()
+
+    # Se detectó una fase candidata nueva
+    if estado_eval.get("fase_candidata") != fase_candidata:
+
+        estado_eval["fase_candidata"] = fase_candidata
+        estado_eval["fase_candidata_desde"] = ahora
+
+        return False
+
+    inicio = estado_eval.get(
+        "fase_candidata_desde"
+    )
+
+    if inicio is None:
+
+        estado_eval["fase_candidata_desde"] = ahora
+
+        return False
+
+    # La condición se mantuvo el tiempo suficiente
+    if ahora - inicio >= duracion_minima:
+
+        estado_eval["fase_candidata"] = None
+        estado_eval["fase_candidata_desde"] = None
+
+        return True
+
+    return False
+
+def actualizar_inicio_intento(
+    estado_eval,
+    condicion_inicio,
+    duracion_minima=0.20
+):
+    """
+    Marca que un intento realmente comenzó
+    cuando el movimiento parcial se mantiene
+    durante un tiempo mínimo.
+    """
+
+    if estado_eval.get("intento_activo", False):
+        return
+
+    ahora = time.time()
+
+    if condicion_inicio:
+
+        if estado_eval.get("intento_candidato_desde") is None:
+
+            estado_eval["intento_candidato_desde"] = ahora
+
+        elif (
+            ahora
+            - estado_eval["intento_candidato_desde"]
+            >= duracion_minima
+        ):
+
+            estado_eval["intento_activo"] = True
+
+    else:
+
+        estado_eval["intento_candidato_desde"] = None
+
+
+def reiniciar_intento(estado_eval):
+    """
+    Limpia el estado de un intento.
+    """
+
+    estado_eval["intento_activo"] = False
+    estado_eval["intento_candidato_desde"] = None
+    estado_eval["angulo_max_intento"] = None
+
+
+def detectar_retorno_sin_completar(
+    estado_eval,
+    condicion_retorno
+):
+    """
+    Detecta cuando una persona inició el movimiento,
+    pero regresó a la posición inicial sin alcanzar
+    la fase objetivo.
+    """
+
+    if (
+        estado_eval.get("intento_activo", False)
+        and condicion_retorno
+    ):
+
+        estado_eval[
+            "intento_no_completado_evento"
+        ] = True
+
+        reiniciar_intento(estado_eval)
+
+        return True
+
+    return False
 
 def evaluar_extension_rodilla(angulo, estado_eval):
     """
     Ejercicio: Extensión de rodilla sentado.
+
     Movimiento esperado:
     rodilla flexionada -> rodilla extendida.
+
+    Se confirma cada fase durante un tiempo mínimo
+    y también se detectan intentos iniciados pero
+    no completados.
     """
+
     rep_valida = False
 
+    # Este valor solo dura un ciclo/frame.
+    # ejercicio.py lo leerá si ocurrió un intento no completado.
+    estado_eval["intento_no_completado_evento"] = False
+
     if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la rodilla"
+
+        estado_eval["fase_candidata"] = None
+        estado_eval["fase_candidata_desde"] = None
+
+        estado_eval["intento_candidato_desde"] = None
+
+        return (
+            rep_valida,
+            estado_eval,
+            "No se detecta correctamente la rodilla"
+        )
+
+    ahora = time.time()
+
+    # ==================================================
+    # DETECTAR QUE REALMENTE COMENZÓ UN INTENTO
+    # ==================================================
+
+    if (
+        estado_eval["fase"] == "flexionado"
+        and angulo >= 130
+    ):
+
+        if estado_eval["intento_candidato_desde"] is None:
+
+            estado_eval["intento_candidato_desde"] = ahora
+
+        elif (
+            ahora
+            - estado_eval["intento_candidato_desde"]
+            >= 0.20
+        ):
+
+            estado_eval["intento_activo"] = True
+
+            if estado_eval["angulo_max_intento"] is None:
+
+                estado_eval["angulo_max_intento"] = angulo
+
+            else:
+
+                estado_eval["angulo_max_intento"] = max(
+                    estado_eval["angulo_max_intento"],
+                    angulo
+                )
+
+    elif (
+        estado_eval["fase"] == "flexionado"
+        and not estado_eval["intento_activo"]
+    ):
+
+        estado_eval["intento_candidato_desde"] = None
+
+    # ==================================================
+    # INTENTO INICIADO PERO NO COMPLETADO
+    # ==================================================
+
+    if (
+        estado_eval["fase"] == "flexionado"
+        and
+        estado_eval["intento_activo"]
+        and
+        angulo < 120
+    ):
+
+        estado_eval["intento_no_completado_evento"] = True
+
+        estado_eval["intento_activo"] = False
+        estado_eval["intento_candidato_desde"] = None
+        estado_eval["angulo_max_intento"] = None
+
+    # ==================================================
+    # FASE FLEXIONADA
+    # ==================================================
 
     if angulo < 120:
-        estado_eval["fase"] = "flexionado"
-        mensaje = "Buena flexión, ahora estira la pierna"
-    elif angulo > 150 and estado_eval["fase"] == "flexionado":
-        rep_valida = True
-        estado_eval["fase"] = "extendido"
-        mensaje = "Repetición válida: rodilla extendida"
+
+        if estado_eval["fase"] != "flexionado":
+
+            flexion_confirmada = confirmar_fase_estable(
+                estado_eval,
+                "flexionado",
+                duracion_minima=0.30
+            )
+
+            if flexion_confirmada:
+
+                estado_eval["fase"] = "flexionado"
+
+                mensaje = (
+                    "Buena flexión, ahora estira la pierna"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición de flexión un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Buena flexión, ahora estira la pierna"
+            )
+
+    # ==================================================
+    # FASE EXTENDIDA
+    # ==================================================
+
+    elif (
+        angulo > 150
+        and
+        estado_eval["fase"] == "flexionado"
+    ):
+
+        extension_confirmada = confirmar_fase_estable(
+            estado_eval,
+            "extendido",
+            duracion_minima=0.30
+        )
+
+        if extension_confirmada:
+
+            rep_valida = True
+
+            estado_eval["fase"] = "extendido"
+
+            # El intento terminó correctamente
+            estado_eval["intento_activo"] = False
+            estado_eval["intento_candidato_desde"] = None
+            estado_eval["angulo_max_intento"] = None
+
+            mensaje = (
+                "Repetición válida: rodilla extendida"
+            )
+
+        else:
+
+            mensaje = (
+                "Mantén la extensión un momento"
+            )
+
+    # ==================================================
+    # ZONA INTERMEDIA
+    # ==================================================
+
     else:
-        mensaje = "Realiza el movimiento de forma lenta y controlada"
+
+        estado_eval["fase_candidata"] = None
+        estado_eval["fase_candidata_desde"] = None
+
+        mensaje = (
+            "Realiza el movimiento de forma lenta y controlada"
+        )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_sentadilla(angulo, estado_eval, umbral_bajada=130, umbral_subida=150):
-    """
-    Ejercicios: mini sentadilla, sentadilla parcial, sentadilla controlada.
-    Movimiento esperado:
-    de pie -> baja flexionando rodilla -> vuelve a subir.
-    """
+def evaluar_sentadilla(
+    angulo,
+    estado_eval,
+    umbral_bajada=130,
+    umbral_subida=150
+):
+
     rep_valida = False
 
-    if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la rodilla"
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
 
-    if angulo < umbral_bajada:
-        estado_eval["fase"] = "abajo"
-        mensaje = "Buena bajada, ahora sube lentamente"
-    elif angulo > umbral_subida and estado_eval["fase"] == "abajo":
-        rep_valida = True
-        estado_eval["fase"] = "arriba"
-        mensaje = "Repetición válida: subiste con control"
-    else:
-        mensaje = "Flexiona y extiende la rodilla con control"
+    if angulo is None:
+
+        return (
+            rep_valida,
+            estado_eval,
+            "No se detecta correctamente la rodilla"
+        )
+
+    abajo = angulo < umbral_bajada
+    arriba = angulo > umbral_subida
+
+    # Punto intermedio que indica que
+    # realmente comenzó a flexionar.
+    umbral_inicio_intento = (
+        umbral_bajada + umbral_subida
+    ) / 2
+
+    movimiento_parcial = (
+        angulo < umbral_inicio_intento
+    )
+
+    # ------------------------------------------
+    # POSICIÓN INICIAL
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "inicio":
+
+        if arriba:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                estado_eval["fase"] = "arriba"
+
+                mensaje = (
+                    "Posición inicial detectada, "
+                    "puedes comenzar"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición de pie un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Colócate de pie para comenzar"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    # ------------------------------------------
+    # DESDE ARRIBA: COMIENZA SENTADILLA
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "arriba":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abajo"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Buena bajada, ahora sube lentamente"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición baja un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            arriba
+        ):
+
+            mensaje = (
+                "Intenta flexionar un poco más las rodillas"
+            )
+
+        else:
+
+            mensaje = (
+                "Flexiona las rodillas con control"
+            )
+
+    # ------------------------------------------
+    # REGRESO ARRIBA
+    # ------------------------------------------
+
+    elif estado_eval["fase"] == "abajo":
+
+        if arriba:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "arriba"
+
+                mensaje = (
+                    "Repetición válida: "
+                    "subiste con control"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición de pie un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Ahora vuelve a subir lentamente"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_elevacion_pierna_recta(angulo, puntos, estado_eval):
-    """
-    Ejercicio: Elevación de pierna recta.
-    Movimiento esperado:
-    la pierna sube manteniendo rodilla extendida.
-    Se valida por altura del tobillo y rodilla extendida.
-    """
+def evaluar_elevacion_pierna_recta(
+    angulo,
+    puntos,
+    estado_eval
+):
+
     rep_valida = False
 
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
+
     if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la pierna"
+
+        return (
+            rep_valida,
+            estado_eval,
+            "No se detecta correctamente la pierna"
+        )
 
     tobillo_y = puntos["tobillo_norm"][1]
 
     if estado_eval["base_tobillo_y"] is None:
+
         estado_eval["base_tobillo_y"] = tobillo_y
 
-    diferencia_altura = estado_eval["base_tobillo_y"] - tobillo_y
+    diferencia_altura = (
+        estado_eval["base_tobillo_y"]
+        - tobillo_y
+    )
 
     rodilla_extendida = angulo > 145
+
     pierna_elevada = diferencia_altura > 0.10
     pierna_abajo = diferencia_altura < 0.04
 
-    if not rodilla_extendida:
-        mensaje = "Mantén la rodilla más extendida"
-    elif pierna_elevada and estado_eval["fase"] in ["inicio", "abajo"]:
-        estado_eval["fase"] = "arriba"
-        mensaje = "Pierna elevada, ahora baja lentamente"
-    elif pierna_abajo and estado_eval["fase"] == "arriba":
-        rep_valida = True
-        estado_eval["fase"] = "abajo"
-        mensaje = "Repetición válida: elevación completa"
-    else:
-        mensaje = "Eleva la pierna manteniéndola recta"
+    movimiento_parcial = (
+        diferencia_altura > 0.05
+    )
+
+    # ------------------------------------------
+    # POSICIÓN INICIAL
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "inicio":
+
+        if pierna_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abajo"
+
+                mensaje = (
+                    "Posición inicial detectada"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la pierna abajo un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Coloca la pierna en la posición inicial"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    # ------------------------------------------
+    # SUBIDA
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "abajo":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if (
+            pierna_elevada
+            and rodilla_extendida
+        ):
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                estado_eval["fase"] = "arriba"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Pierna elevada, "
+                    "ahora baja lentamente"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la pierna elevada un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            pierna_abajo
+        ):
+
+            mensaje = (
+                "Intenta elevar un poco más la pierna"
+            )
+
+        elif not rodilla_extendida:
+
+            mensaje = (
+                "Mantén la rodilla más extendida"
+            )
+
+        else:
+
+            mensaje = (
+                "Eleva la pierna lentamente"
+            )
+
+    # ------------------------------------------
+    # BAJADA
+    # ------------------------------------------
+
+    elif estado_eval["fase"] == "arriba":
+
+        if pierna_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "abajo"
+
+                mensaje = (
+                    "Repetición válida: elevación completa"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Baja lentamente la pierna"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_step_basico(angulo, puntos, estado_eval):
+def evaluar_step_basico(
+    angulo,
+    puntos,
+    estado_eval
+):
+
     rep_valida = False
 
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
+
     if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la pierna"
+
+        return (
+            rep_valida,
+            estado_eval,
+            "No se detecta correctamente la pierna"
+        )
 
     tobillo_y = puntos["tobillo_norm"][1]
 
     if estado_eval["base_tobillo_y"] is None:
         estado_eval["base_tobillo_y"] = tobillo_y
 
-    diferencia_altura = estado_eval["base_tobillo_y"] - tobillo_y
+    diferencia_altura = (
+        estado_eval["base_tobillo_y"]
+        - tobillo_y
+    )
 
-    subio = diferencia_altura > 0.08 and angulo > 130
+    subio = (
+        diferencia_altura > 0.08
+        and angulo > 130
+    )
+
     bajo = diferencia_altura < 0.03
 
-    if subio and estado_eval["fase"] in ["inicio", "abajo"]:
-        estado_eval["fase"] = "arriba"
-        mensaje = "Subida detectada, ahora baja con control"
-    elif bajo and estado_eval["fase"] == "arriba":
-        rep_valida = True
-        estado_eval["fase"] = "abajo"
-        mensaje = "Repetición válida: step completo"
-    else:
-        mensaje = "Sube y baja de forma controlada"
+    movimiento_parcial = (
+        diferencia_altura > 0.04
+    )
+
+    if estado_eval["fase"] == "inicio":
+
+        if bajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abajo"
+                mensaje = "Posición inicial detectada"
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = "Colócate en la posición inicial"
+
+        return rep_valida, estado_eval, mensaje
+
+    if estado_eval["fase"] == "abajo":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if subio:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                estado_eval["fase"] = "arriba"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Subida detectada, "
+                    "ahora baja con control"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la subida un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            bajo
+        ):
+
+            mensaje = (
+                "Intenta completar un poco más la subida"
+            )
+
+        else:
+
+            mensaje = (
+                "Realiza la subida de forma controlada"
+            )
+
+    elif estado_eval["fase"] == "arriba":
+
+        if bajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "abajo"
+
+                mensaje = (
+                    "Repetición válida: step completo"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Baja de forma controlada"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_puente_gluteo(angulo, puntos, estado_eval):
-    """
-    Ejercicio: Puente glúteo.
-    Movimiento esperado:
-    pelvis baja -> pelvis sube -> pelvis vuelve a bajar.
-    Se usa la altura de la cadera como referencia.
-    """
+def evaluar_puente_gluteo(
+    angulo,
+    puntos,
+    estado_eval
+):
+
     rep_valida = False
+
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
 
     cadera_y = puntos["cadera_norm"][1]
 
     if estado_eval.get("base_cadera_y") is None:
         estado_eval["base_cadera_y"] = cadera_y
 
-    diferencia_altura = estado_eval["base_cadera_y"] - cadera_y
+    diferencia_altura = (
+        estado_eval["base_cadera_y"]
+        - cadera_y
+    )
 
     pelvis_arriba = diferencia_altura > 0.08
     pelvis_abajo = diferencia_altura < 0.03
 
-    if pelvis_arriba and estado_eval["fase"] in ["inicio", "abajo"]:
-        estado_eval["fase"] = "arriba"
-        mensaje = "Puente detectado, baja lentamente"
-    elif pelvis_abajo and estado_eval["fase"] == "arriba":
-        rep_valida = True
-        estado_eval["fase"] = "abajo"
-        mensaje = "Repetición válida: puente completo"
-    else:
-        mensaje = "Eleva la pelvis y vuelve con control"
+    movimiento_parcial = (
+        diferencia_altura > 0.04
+    )
+
+    if estado_eval["fase"] == "inicio":
+
+        if pelvis_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abajo"
+                mensaje = "Posición inicial detectada"
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Coloca la pelvis en la posición inicial"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    if estado_eval["fase"] == "abajo":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if pelvis_arriba:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                estado_eval["fase"] = "arriba"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Puente detectado, "
+                    "baja lentamente"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la pelvis elevada un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            pelvis_abajo
+        ):
+
+            mensaje = (
+                "Intenta elevar un poco más la pelvis"
+            )
+
+        else:
+
+            mensaje = (
+                "Eleva la pelvis con control"
+            )
+
+    elif estado_eval["fase"] == "arriba":
+
+        if pelvis_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "abajo"
+
+                mensaje = (
+                    "Repetición válida: puente completo"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Baja lentamente la pelvis"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_abduccion_cadera(angulo, puntos, estado_eval):
-    """
-    Ejercicio: Abducción de cadera de pie.
-    Movimiento esperado:
-    pierna al centro -> pierna se separa lateralmente -> vuelve al centro.
-    Se usa el desplazamiento horizontal del tobillo.
-    """
+def evaluar_abduccion_cadera(
+    angulo,
+    puntos,
+    estado_eval
+):
+
     rep_valida = False
+
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
 
     tobillo_x = puntos["tobillo_norm"][0]
 
     if estado_eval["base_tobillo_x"] is None:
         estado_eval["base_tobillo_x"] = tobillo_x
 
-    desplazamiento = tobillo_x - estado_eval["base_tobillo_x"]
+    desplazamiento = (
+        tobillo_x
+        - estado_eval["base_tobillo_x"]
+    )
 
-    pierna_abierta = abs(desplazamiento) > 0.08
-    pierna_centro = abs(desplazamiento) < 0.03
+    desplazamiento_abs = abs(
+        desplazamiento
+    )
 
-    if pierna_abierta and estado_eval["fase"] in ["inicio", "centro"]:
-        estado_eval["fase"] = "abierta"
-        mensaje = "Pierna separada, vuelve lentamente al centro"
-    elif pierna_centro and estado_eval["fase"] == "abierta":
-        rep_valida = True
-        estado_eval["fase"] = "centro"
-        mensaje = "Repetición válida: abducción completa"
-    else:
-        mensaje = "Separa la pierna lateralmente y vuelve al centro"
+    pierna_abierta = desplazamiento_abs > 0.08
+    pierna_centro = desplazamiento_abs < 0.03
+
+    movimiento_parcial = (
+        desplazamiento_abs > 0.04
+    )
+
+    if estado_eval["fase"] == "inicio":
+
+        if pierna_centro:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "centro",
+                0.30
+            ):
+
+                estado_eval["fase"] = "centro"
+                mensaje = "Posición inicial detectada"
+
+            else:
+
+                mensaje = (
+                    "Mantén la pierna al centro un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Coloca la pierna en la posición inicial"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    if estado_eval["fase"] == "centro":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if pierna_abierta:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abierta",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abierta"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Pierna separada, "
+                    "vuelve lentamente al centro"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la pierna separada un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            pierna_centro
+        ):
+
+            mensaje = (
+                "Intenta separar un poco más la pierna"
+            )
+
+        else:
+
+            mensaje = (
+                "Separa la pierna lateralmente"
+            )
+
+    elif estado_eval["fase"] == "abierta":
+
+        if pierna_centro:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "centro",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "centro"
+
+                mensaje = (
+                    "Repetición válida: "
+                    "abducción completa"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Vuelve lentamente al centro"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_sit_to_stand(angulo, estado_eval):
-    """
-    Ejercicio: Sit to Stand.
-    Movimiento esperado:
-    sentado/flexionado -> de pie/extendido -> vuelve a sentado.
-    Se valida con el ángulo de rodilla.
-    """
+def evaluar_sit_to_stand(
+    angulo,
+    estado_eval
+):
+
     rep_valida = False
 
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
+
     if angulo is None:
-        return rep_valida, estado_eval, "No se detecta correctamente la rodilla"
+
+        return (
+            rep_valida,
+            estado_eval,
+            "No se detecta correctamente la rodilla"
+        )
 
     sentado = angulo < 120
     de_pie = angulo > 155
 
-    if de_pie and estado_eval["fase"] in ["inicio", "sentado"]:
-        estado_eval["fase"] = "de_pie"
-        mensaje = "De pie detectado, vuelve a sentarte con control"
-    elif sentado and estado_eval["fase"] == "de_pie":
-        rep_valida = True
-        estado_eval["fase"] = "sentado"
-        mensaje = "Repetición válida: sentado y de pie completo"
-    else:
-        mensaje = "Levántate y siéntate de forma controlada"
+    movimiento_parcial = (
+        angulo > 135
+    )
+
+    # ------------------------------------------
+    # POSICIÓN INICIAL SENTADO
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "inicio":
+
+        if sentado:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "sentado",
+                0.30
+            ):
+
+                estado_eval["fase"] = "sentado"
+
+                mensaje = (
+                    "Posición inicial detectada"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición sentado un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Siéntate para comenzar el ejercicio"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    # ------------------------------------------
+    # LEVANTARSE
+    # ------------------------------------------
+
+    if estado_eval["fase"] == "sentado":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if de_pie:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "de_pie",
+                0.30
+            ):
+
+                estado_eval["fase"] = "de_pie"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "De pie detectado, "
+                    "vuelve a sentarte con control"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición de pie un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            sentado
+        ):
+
+            mensaje = (
+                "Intenta completar el movimiento al levantarte"
+            )
+
+        else:
+
+            mensaje = (
+                "Levántate de forma controlada"
+            )
+
+    # ------------------------------------------
+    # VOLVER A SENTARSE
+    # ------------------------------------------
+
+    elif estado_eval["fase"] == "de_pie":
+
+        if sentado:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "sentado",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "sentado"
+
+                mensaje = (
+                    "Repetición válida: "
+                    "sentado y de pie completo"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición sentado un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Siéntate lentamente y con control"
+            )
 
     return rep_valida, estado_eval, mensaje
 
 
-def evaluar_marcha_sitio(angulo, puntos, estado_eval):
-    """
-    Ejercicio: Elevación alternada de rodillas / Marcha en el sitio.
-    Movimiento esperado:
-    rodilla baja -> rodilla sube -> rodilla baja.
-    Se usa la altura de la rodilla.
-    """
+def evaluar_marcha_sitio(
+    angulo,
+    puntos,
+    estado_eval
+):
+
     rep_valida = False
+
+    estado_eval[
+        "intento_no_completado_evento"
+    ] = False
 
     rodilla_y = puntos["rodilla_norm"][1]
 
     if estado_eval.get("base_rodilla_y") is None:
         estado_eval["base_rodilla_y"] = rodilla_y
 
-    diferencia_altura = estado_eval["base_rodilla_y"] - rodilla_y
+    diferencia_altura = (
+        estado_eval["base_rodilla_y"]
+        - rodilla_y
+    )
 
     rodilla_arriba = diferencia_altura > 0.08
     rodilla_abajo = diferencia_altura < 0.03
 
-    if rodilla_arriba and estado_eval["fase"] in ["inicio", "abajo"]:
-        estado_eval["fase"] = "arriba"
-        mensaje = "Rodilla elevada, baja con control"
-    elif rodilla_abajo and estado_eval["fase"] == "arriba":
-        rep_valida = True
-        estado_eval["fase"] = "abajo"
-        mensaje = "Repetición válida: marcha en el sitio"
-    else:
-        mensaje = "Eleva una rodilla y vuelve a la posición inicial"
+    movimiento_parcial = (
+        diferencia_altura > 0.04
+    )
+
+    if estado_eval["fase"] == "inicio":
+
+        if rodilla_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                estado_eval["fase"] = "abajo"
+                mensaje = "Posición inicial detectada"
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Colócate en la posición inicial"
+            )
+
+        return rep_valida, estado_eval, mensaje
+
+    if estado_eval["fase"] == "abajo":
+
+        actualizar_inicio_intento(
+            estado_eval,
+            movimiento_parcial,
+            0.20
+        )
+
+        if rodilla_arriba:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "arriba",
+                0.30
+            ):
+
+                estado_eval["fase"] = "arriba"
+
+                reiniciar_intento(
+                    estado_eval
+                )
+
+                mensaje = (
+                    "Rodilla elevada, "
+                    "baja con control"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la rodilla elevada un momento"
+                )
+
+        elif detectar_retorno_sin_completar(
+            estado_eval,
+            rodilla_abajo
+        ):
+
+            mensaje = (
+                "Intenta elevar un poco más la rodilla"
+            )
+
+        else:
+
+            mensaje = (
+                "Eleva la rodilla con control"
+            )
+
+    elif estado_eval["fase"] == "arriba":
+
+        if rodilla_abajo:
+
+            if confirmar_fase_estable(
+                estado_eval,
+                "abajo",
+                0.30
+            ):
+
+                rep_valida = True
+                estado_eval["fase"] = "abajo"
+
+                mensaje = (
+                    "Repetición válida: marcha en el sitio"
+                )
+
+            else:
+
+                mensaje = (
+                    "Mantén la posición inicial un momento"
+                )
+
+        else:
+
+            mensaje = (
+                "Baja la rodilla con control"
+            )
 
     return rep_valida, estado_eval, mensaje
 

@@ -64,7 +64,11 @@ def initialize_database():
 
             target_repetitions INTEGER NOT NULL DEFAULT 10,
 
+            target_duration_seconds INTEGER NOT NULL DEFAULT 60,
+
             duration_seconds INTEGER NOT NULL DEFAULT 0,
+
+            correction_count INTEGER NOT NULL DEFAULT 0,
 
             points_earned INTEGER NOT NULL DEFAULT 0,
 
@@ -152,6 +156,9 @@ def initialize_database():
 
             target_repetitions INTEGER NOT NULL
                 DEFAULT 10,
+
+            target_duration_seconds INTEGER NOT NULL
+    DEFAULT 60,
 
             UNIQUE (
                 participant_id,
@@ -254,6 +261,56 @@ def initialize_database():
             ALTER TABLE sessions
             ADD COLUMN points_earned INTEGER
             DEFAULT 0
+        """)
+
+    # ------------------------------------------
+    # EJERCICIOS DE SESIÓN
+    # ------------------------------------------
+
+    cursor.execute(
+        "PRAGMA table_info(session_exercises)"
+    )
+
+    session_exercise_columns = [
+        column[1]
+        for column in cursor.fetchall()
+    ]
+
+    if "target_duration_seconds" not in session_exercise_columns:
+
+        cursor.execute("""
+            ALTER TABLE session_exercises
+            ADD COLUMN target_duration_seconds INTEGER
+            NOT NULL DEFAULT 60
+        """)
+
+    if "correction_count" not in session_exercise_columns:
+
+        cursor.execute("""
+            ALTER TABLE session_exercises
+            ADD COLUMN correction_count INTEGER
+            NOT NULL DEFAULT 0
+        """)
+
+    # ------------------------------------------
+    # CONFIGURACIÓN DE EJERCICIOS
+    # ------------------------------------------
+
+    cursor.execute(
+        "PRAGMA table_info(participant_exercises)"
+    )
+
+    participant_exercise_columns = [
+        column[1]
+        for column in cursor.fetchall()
+    ]
+
+    if "target_duration_seconds" not in participant_exercise_columns:
+
+        cursor.execute("""
+            ALTER TABLE participant_exercises
+            ADD COLUMN target_duration_seconds INTEGER
+            NOT NULL DEFAULT 60
         """)
 
     conn.commit()
@@ -415,6 +472,96 @@ def set_exercise_repetitions(
     conn.commit()
     conn.close()
 
+# ==================================================
+# CONFIGURACIÓN DE TIEMPO POR PARTICIPANTE
+# ==================================================
+
+def get_exercise_duration(
+    participant_id,
+    exercise_id,
+    default_seconds=60
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT target_duration_seconds
+        FROM participant_exercises
+        WHERE participant_id = ?
+        AND exercise_id = ?
+    """, (
+        participant_id,
+        exercise_id
+    ))
+
+    result = cursor.fetchone()
+
+    if result is not None:
+        duration = result[0]
+        conn.close()
+        return duration
+
+    cursor.execute("""
+        INSERT INTO participant_exercises
+        (
+            participant_id,
+            exercise_id,
+            target_repetitions,
+            target_duration_seconds
+        )
+        VALUES
+        (
+            ?, ?, 10, ?
+        )
+    """, (
+        participant_id,
+        exercise_id,
+        default_seconds
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return default_seconds
+
+
+def set_exercise_duration(
+    participant_id,
+    exercise_id,
+    duration_seconds
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO participant_exercises
+        (
+            participant_id,
+            exercise_id,
+            target_repetitions,
+            target_duration_seconds
+        )
+        VALUES
+        (
+            ?, ?, 10, ?
+        )
+        ON CONFLICT (
+            participant_id,
+            exercise_id
+        )
+        DO UPDATE SET
+            target_duration_seconds =
+                excluded.target_duration_seconds
+    """, (
+        participant_id,
+        exercise_id,
+        duration_seconds
+    ))
+
+    conn.commit()
+    conn.close()
 
 def get_all_exercise_repetitions(
     participant_id

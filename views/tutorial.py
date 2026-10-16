@@ -45,7 +45,21 @@ def pantalla_tutorial():
         unsafe_allow_html=True
     )
 
-    st.info("La cámara se activará automáticamente cuando termine el tutorial.")
+    repeticiones_objetivo = st.session_state.get(
+    "repeticiones_objetivo",
+    ejercicio.get("repeticiones_objetivo", 10)
+    )
+
+    duracion_objetivo = st.session_state.get(
+        "duracion_objetivo_segundos",
+        ejercicio.get("duracion_objetivo_segundos", 60)
+    )
+
+    st.info(
+        "La cámara se activará automáticamente cuando termine el tutorial. "
+        f"Objetivo: {repeticiones_objetivo} repeticiones en un máximo de "
+        f"{duracion_objetivo} segundos."
+    )
 
     videos_tutorial = {
         1: "imagenes/tutorial_extension_rodilla.mp4",
