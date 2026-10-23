@@ -61,6 +61,255 @@ def obtener_puntos_pierna(landmarks, width, height, lado="RIGHT"):
         "tobillo_norm": (tobillo.x, tobillo.y),
     }
 
+def obtener_muestra_calibracion(
+    landmarks,
+    width,
+    height,
+    lado="RIGHT"
+):
+    """
+    Obtiene una muestra válida de cadera, rodilla y tobillo
+    para una pierna durante la fase de preparación.
+
+    MediaPipe no se modifica. Esta función solamente utiliza
+    los landmarks que MediaPipe ya estimó.
+    """
+
+    puntos = obtener_puntos_pierna(
+        landmarks=landmarks,
+        width=width,
+        height=height,
+        lado=lado
+    )
+
+    if puntos is None:
+        return None
+
+    if lado == "LEFT":
+
+        hip_id = (
+            mp_pose.PoseLandmark.LEFT_HIP.value
+        )
+
+        knee_id = (
+            mp_pose.PoseLandmark.LEFT_KNEE.value
+        )
+
+        ankle_id = (
+            mp_pose.PoseLandmark.LEFT_ANKLE.value
+        )
+
+    else:
+
+        hip_id = (
+            mp_pose.PoseLandmark.RIGHT_HIP.value
+        )
+
+        knee_id = (
+            mp_pose.PoseLandmark.RIGHT_KNEE.value
+        )
+
+        ankle_id = (
+            mp_pose.PoseLandmark.RIGHT_ANKLE.value
+        )
+
+    visibilidades = [
+        float(
+            landmarks[hip_id].visibility
+        ),
+        float(
+            landmarks[knee_id].visibility
+        ),
+        float(
+            landmarks[ankle_id].visibility
+        ),
+    ]
+
+    return {
+        "lado": lado,
+
+        "visibilidad_media": float(
+            np.mean(visibilidades)
+        ),
+
+        "visibilidad_minima": float(
+            min(visibilidades)
+        ),
+
+        "cadera_x": float(
+            puntos["cadera_norm"][0]
+        ),
+
+        "cadera_y": float(
+            puntos["cadera_norm"][1]
+        ),
+
+        "rodilla_x": float(
+            puntos["rodilla_norm"][0]
+        ),
+
+        "rodilla_y": float(
+            puntos["rodilla_norm"][1]
+        ),
+
+        "tobillo_x": float(
+            puntos["tobillo_norm"][0]
+        ),
+
+        "tobillo_y": float(
+            puntos["tobillo_norm"][1]
+        ),
+    }
+
+
+def seleccionar_lado_calibracion(
+    muestras_por_lado
+):
+    """
+    Compara ambos lados durante la preparación y selecciona
+    la pierna que presentó más frames válidos y mejor
+    visibilidad.
+    """
+
+    mejor_lado = None
+    mejor_puntaje = -1
+
+    for lado in (
+        "RIGHT",
+        "LEFT"
+    ):
+
+        muestras = muestras_por_lado.get(
+            lado,
+            []
+        )
+
+        if not muestras:
+            continue
+
+        visibilidad_mediana = float(
+            np.median(
+                [
+                    muestra["visibilidad_media"]
+                    for muestra in muestras
+                ]
+            )
+        )
+
+        # Premia tanto la cantidad de frames válidos
+        # como la calidad de detección.
+        puntaje = (
+            len(muestras)
+            *
+            visibilidad_mediana
+        )
+
+        if puntaje > mejor_puntaje:
+
+            mejor_puntaje = puntaje
+            mejor_lado = lado
+
+    return mejor_lado
+
+
+def calcular_referencia_estable(
+    muestras,
+    ventana=18,
+    desplazamiento_maximo=0.035
+):
+    """
+    Construye una referencia corporal usando la mediana
+    de varios frames recientes.
+
+    Solo devuelve una referencia cuando la posición del
+    participante se mantiene suficientemente estable.
+    """
+
+    if len(muestras) < ventana:
+        return None
+
+    recientes = muestras[
+        -ventana:
+    ]
+
+    claves_posicion = [
+        "cadera_x",
+        "cadera_y",
+        "rodilla_x",
+        "rodilla_y",
+        "tobillo_x",
+        "tobillo_y",
+    ]
+
+    # Verificar que la persona no se esté moviendo
+    # demasiado durante la captura de referencia.
+    for clave in claves_posicion:
+
+        valores = np.array(
+            [
+                muestra[clave]
+                for muestra in recientes
+            ],
+            dtype=float
+        )
+
+        if (
+            np.ptp(valores)
+            >
+            desplazamiento_maximo
+        ):
+            return None
+
+    return {
+        "base_tobillo_y": float(
+            np.median(
+                [
+                    muestra["tobillo_y"]
+                    for muestra in recientes
+                ]
+            )
+        ),
+
+        "base_tobillo_x": float(
+            np.median(
+                [
+                    muestra["tobillo_x"]
+                    for muestra in recientes
+                ]
+            )
+        ),
+
+        "base_cadera_y": float(
+            np.median(
+                [
+                    muestra["cadera_y"]
+                    for muestra in recientes
+                ]
+            )
+        ),
+
+        "base_rodilla_y": float(
+            np.median(
+                [
+                    muestra["rodilla_y"]
+                    for muestra in recientes
+                ]
+            )
+        ),
+
+        "visibilidad_media": float(
+            np.median(
+                [
+                    muestra["visibilidad_media"]
+                    for muestra in recientes
+                ]
+            )
+        ),
+
+        "muestras_utilizadas": len(
+            recientes
+        ),
+    }
 
 def dibujar_solo_pierna(frame, puntos, angulo_actual):
     cadera = puntos["cadera"]

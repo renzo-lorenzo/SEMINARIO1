@@ -286,17 +286,52 @@ def pantalla_ejercicio():
     )
 
     # ======================================================
+    # CALIBRACIÓN OBTENIDA EN EL TUTORIAL
+    # ======================================================
+
+    calibracion = st.session_state.get(
+        "calibracion_ejercicio",
+        None
+    )
+
+    calibracion_valida = (
+        calibracion is not None
+        and
+        calibracion.get("ejercicio_id") == ejercicio["id"]
+        and
+        calibracion.get("lado") in ["RIGHT", "LEFT"]
+    )
+
+    # Solo exigimos calibración mientras el ejercicio
+    # todavía no ha terminado.
+    if (
+        not st.session_state.ejercicio_completado
+        and
+        not calibracion_valida
+    ):
+
+        st.warning(
+            "Este ejercicio necesita completar primero "
+            "la fase de preparación."
+        )
+
+        if st.button(
+            "Volver a preparar el ejercicio",
+            use_container_width=True
+        ):
+
+            st.session_state.pantalla = "tutorial"
+            st.rerun()
+
+        return
+
+    # ======================================================
     # PANTALLA FINAL
     # ======================================================
 
     if st.session_state.ejercicio_completado:
 
         hablar_fin_ejercicio_si_corresponde()
-
-        st.markdown(
-            f'<div class="title">{ejercicio["nombre"]}</div>',
-            unsafe_allow_html=True
-        )
 
         st.markdown(
             '<div class="subtitle">'
@@ -557,32 +592,34 @@ def pantalla_ejercicio():
     # ENCABEZADO
     # ======================================================
 
-    st.markdown(
-        f'<div class="title">{ejercicio["nombre"]}</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        f'''
-        <div class="subtitle">
-            Nivel {ejercicio["nivel_dificultad"]}
-            -
-            {ejercicio["objetivo"]}
-        </div>
-        ''',
-        unsafe_allow_html=True
-    )
-
-    st.info(
-        "Ubícate frente a la cámara. "
-        "El sistema analizará tu movimiento automáticamente."
-    )
-
     hablar(
-        f"Vamos a iniciar el ejercicio {ejercicio['nombre']}. "
-        "Ubícate frente a la cámara y mantén el cuerpo visible.",
+        f"Vamos a iniciar el ejercicio {ejercicio['nombre']}.",
         clave=f"inicio_ejercicio_{ejercicio['id']}",
         cooldown=60
+    )
+
+    # ======================================================
+    # MODO DE EJECUCIÓN COMPACTO
+    # ======================================================
+
+    st.markdown(
+        """
+        <style>
+
+        /* Reducir espacio superior solo en esta vista */
+        .block-container {
+            padding-top: 0.6rem !important;
+        }
+
+        /* Acercar los títulos de cámara y guía */
+        h3 {
+            margin-top: 0rem !important;
+            margin-bottom: 0.35rem !important;
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True
     )
 
     # ======================================================
@@ -618,6 +655,32 @@ def pantalla_ejercicio():
         animacion_placeholder = st.empty()
 
         resultados_placeholder = st.empty()
+
+        # Feedback gamificado que aparece
+        # cuando se reconoce una repetición.
+        feedback_placeholder = st.empty()
+
+        # Reservar altura fija para que la barra no suba/baje
+        feedback_placeholder.markdown(
+            """
+            <div style="
+                height: 42px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # Barra de progreso independiente.
+        barra_progreso_placeholder = st.empty()
+
+        estado_placeholder = st.empty()
+
+        # Ángulo mostrado debajo de la barra.
+        angulo_placeholder = st.empty()
 
     # ======================================================
     # VIDEOS
@@ -667,6 +730,9 @@ def pantalla_ejercicio():
 
     estrellas_ganadas = 0
 
+    # Control visual del feedback "+1"
+    feedback_repeticion_hasta = 0
+
     # Métricas de desempeño
     intentos_no_completados = 0
 
@@ -689,6 +755,28 @@ def pantalla_ejercicio():
     estado_eval = (
         inicializar_estado_evaluacion()
     )
+
+    # Recuperar las referencias obtenidas durante
+    # los 13 segundos de preparación.
+    estado_eval["base_tobillo_y"] = calibracion.get(
+        "base_tobillo_y"
+    )
+
+    estado_eval["base_tobillo_x"] = calibracion.get(
+        "base_tobillo_x"
+    )
+
+    estado_eval["base_cadera_y"] = calibracion.get(
+        "base_cadera_y"
+    )
+
+    estado_eval["base_rodilla_y"] = calibracion.get(
+        "base_rodilla_y"
+    )
+
+    # La pierna elegida durante la preparación
+    # queda bloqueada para toda la ejecución.
+    lado_calibrado = calibracion["lado"]
 
     estado_movimiento = "inicio"
 
@@ -805,29 +893,15 @@ def pantalla_ejercicio():
                 )
 
                 # ------------------------------------------
-                # PIERNA DERECHA
+                # USAR ÚNICAMENTE LA PIERNA CALIBRADA
                 # ------------------------------------------
 
                 puntos_pierna = obtener_puntos_pierna(
                     landmarks=landmarks,
                     width=width,
                     height=height,
-                    lado="RIGHT"
+                    lado=lado_calibrado
                 )
-
-                # ------------------------------------------
-                # SI NO DETECTA DERECHA,
-                # INTENTA IZQUIERDA
-                # ------------------------------------------
-
-                if puntos_pierna is None:
-
-                    puntos_pierna = obtener_puntos_pierna(
-                        landmarks=landmarks,
-                        width=width,
-                        height=height,
-                        lado="LEFT"
-                    )
 
                 # ------------------------------------------
                 # NO DETECTÓ LA PIERNA
@@ -973,6 +1047,66 @@ def pantalla_ejercicio():
 
                         estrellas_ganadas += 10
                         
+                        # Mostrar feedback visual aproximadamente
+                        # durante un segundo.
+                        feedback_repeticion_hasta = (
+                            time.time() + 1.0
+                        )
+
+                        feedback_placeholder.markdown(
+                            """
+                            <style>
+
+                            @keyframes subirFeedback {
+
+                                0% {
+                                    opacity: 0;
+                                    transform: translateY(12px) scale(0.9);
+                                }
+
+                                20% {
+                                    opacity: 1;
+                                    transform: translateY(4px) scale(1.05);
+                                }
+
+                                70% {
+                                    opacity: 1;
+                                    transform: translateY(-4px) scale(1);
+                                }
+
+                                100% {
+                                    opacity: 0;
+                                    transform: translateY(-12px) scale(0.95);
+                                }
+                            }
+
+                            .feedback-contenedor {
+                                height: 42px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            }
+
+                            .feedback-repeticion {
+                                font-size: 2rem;
+                                font-weight: 800;
+                                animation:
+                                    subirFeedback
+                                    0.9s
+                                    ease-out
+                                    forwards;
+                            }
+
+                            </style>
+
+                            <div class="feedback-contenedor">
+                                <div class="feedback-repeticion">
+                                    +1 &nbsp; ¡Muy bien!
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
 
                         # ----------------------------------
                         # RACHA
@@ -1054,37 +1188,6 @@ def pantalla_ejercicio():
             )
 
             # ==================================================
-            # ÁNGULOS
-            # ==================================================
-
-            if angulos:
-
-                promedio = round(
-                    sum(angulos)
-                    /
-                    len(angulos),
-                    2
-                )
-
-                min_texto = round(
-                    angulo_minimo,
-                    2
-                )
-
-                max_texto = round(
-                    angulo_maximo,
-                    2
-                )
-
-            else:
-
-                promedio = "-"
-
-                min_texto = "-"
-
-                max_texto = "-"
-
-            # ==================================================
             # RESULTADOS EN TIEMPO REAL
             # ==================================================
 
@@ -1122,57 +1225,65 @@ def pantalla_ejercicio():
                         f"{tiempo_restante} s"
                     )
 
-                st.progress(
-                    progreso
+            # ==================================================
+            # FEEDBACK GAMIFICADO
+            # ==================================================
+
+            if (
+                feedback_repeticion_hasta > 0
+                and
+                time.time() >= feedback_repeticion_hasta
+            ):
+
+                feedback_placeholder.markdown(
+                    """
+                    <div style="
+                        height: 42px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                    </div>
+                    """,
+                    unsafe_allow_html=True
                 )
 
-                # ------------------------------------------
-                # ÁNGULO
-                # ------------------------------------------
+                feedback_repeticion_hasta = 0
 
-                if angulo_actual is not None:
+                feedback_repeticion_hasta = 0
 
-                    angulo_texto = (
-                        f"{round(angulo_actual, 1)}°"
-                    )
 
-                else:
+            # ==================================================
+            # BARRA DE PROGRESO
+            # ==================================================
 
-                    angulo_texto = "-"
+            barra_progreso_placeholder.progress(
+                progreso
+            )
 
-                st.metric(
-                    "Ángulo",
-                    angulo_texto
+            estado_placeholder.caption(
+                f"Estado: {estado_movimiento}"
+            )
+
+            # ==================================================
+            # ÁNGULO ACTUAL
+            # ==================================================
+
+            if angulo_actual is not None:
+
+                angulo_texto = (
+                    f"{round(angulo_actual, 1)}°"
                 )
 
-                # ------------------------------------------
-                # ESTADO
-                # ------------------------------------------
+            else:
 
-                st.caption(
-                    f"Estado: {estado_movimiento}"
-                )
+                angulo_texto = "-"
 
-                st.caption(
-                    f"Retroalimentación: {mensaje}"
-                )
 
-                # ------------------------------------------
-                # TIEMPO
-                # ------------------------------------------
-
-                minutos = (
-                    tiempo_actual // 60
-                )
-
-                segundos = (
-                    tiempo_actual % 60
-                )
-
-                st.caption(
-                    f"Tiempo transcurrido: {minutos} min {segundos} s "
-                    f"de {duracion_maxima} s configurados"
-                )
+            angulo_placeholder.metric(
+                "Ángulo",
+                angulo_texto
+            )
 
             # ==================================================
             # EJERCICIO COMPLETADO
