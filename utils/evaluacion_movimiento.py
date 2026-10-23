@@ -650,15 +650,20 @@ def evaluar_extension_rodilla(angulo, estado_eval):
 def evaluar_sentadilla(
     angulo,
     estado_eval,
-    umbral_bajada=130,
-    umbral_subida=150
+    umbral_bajada=145,
+    umbral_subida=155
 ):
+    """
+    Mini sentadilla.
+
+    Movimiento:
+    de pie -> flexión parcial -> volver de pie.
+
+    Se utilizan umbrales moderados para evitar exigir
+    una sentadilla profunda a adultos mayores.
+    """
 
     rep_valida = False
-
-    estado_eval[
-        "intento_no_completado_evento"
-    ] = False
 
     if angulo is None:
 
@@ -668,140 +673,90 @@ def evaluar_sentadilla(
             "No se detecta correctamente la rodilla"
         )
 
-    abajo = angulo < umbral_bajada
-    arriba = angulo > umbral_subida
-
-    # Punto intermedio que indica que
-    # realmente comenzó a flexionar.
-    umbral_inicio_intento = (
-        umbral_bajada + umbral_subida
-    ) / 2
-
-    movimiento_parcial = (
-        angulo < umbral_inicio_intento
-    )
-
     # ------------------------------------------
-    # POSICIÓN INICIAL
+    # BAJADA
     # ------------------------------------------
 
-    if estado_eval["fase"] == "inicio":
+    if (
+        angulo < umbral_bajada
+        and
+        estado_eval["fase"] in [
+            "inicio",
+            "arriba"
+        ]
+    ):
 
-        if arriba:
-
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
-            ):
-
-                estado_eval["fase"] = "arriba"
-
-                mensaje = (
-                    "Posición inicial detectada, "
-                    "puedes comenzar"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición de pie un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Colócate de pie para comenzar"
-            )
-
-        return rep_valida, estado_eval, mensaje
-
-    # ------------------------------------------
-    # DESDE ARRIBA: COMIENZA SENTADILLA
-    # ------------------------------------------
-
-    if estado_eval["fase"] == "arriba":
-
-        actualizar_inicio_intento(
+        estable = confirmar_fase_estable(
             estado_eval,
-            movimiento_parcial,
-            0.20
+            "abajo",
+            duracion_minima=0.15
         )
 
-        if abajo:
+        if estable:
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+            estado_eval["fase"] = "abajo"
 
-                estado_eval["fase"] = "abajo"
+            mensaje = (
+                "Muy bien, ahora vuelve a subir"
+            )
 
-                reiniciar_intento(
-                    estado_eval
-                )
+        else:
 
-                mensaje = (
-                    "Buena bajada, ahora sube lentamente"
-                )
+            mensaje = (
+                "Mantén la flexión un momento"
+            )
 
-            else:
+    # ------------------------------------------
+    # SUBIDA
+    # ------------------------------------------
 
-                mensaje = (
-                    "Mantén la posición baja un momento"
-                )
+    elif (
+        angulo > umbral_subida
+        and
+        estado_eval["fase"] == "abajo"
+    ):
 
-        elif detectar_retorno_sin_completar(
+        estable = confirmar_fase_estable(
             estado_eval,
-            arriba
-        ):
+            "arriba",
+            duracion_minima=0.15
+        )
+
+        if estable:
+
+            rep_valida = True
+
+            estado_eval["fase"] = "arriba"
 
             mensaje = (
-                "Intenta flexionar un poco más las rodillas"
+                "Repetición válida"
             )
 
         else:
 
             mensaje = (
-                "Flexiona las rodillas con control"
+                "Termina de subir"
             )
 
-    # ------------------------------------------
-    # REGRESO ARRIBA
-    # ------------------------------------------
+    else:
 
-    elif estado_eval["fase"] == "abajo":
+        estado_eval[
+            "fase_candidata"
+        ] = None
 
-        if arriba:
+        estado_eval[
+            "fase_candidata_desde"
+        ] = None
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
-            ):
+        mensaje = (
+            "Flexiona y vuelve a subir con control"
+        )
 
-                rep_valida = True
-                estado_eval["fase"] = "arriba"
-
-                mensaje = (
-                    "Repetición válida: "
-                    "subiste con control"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición de pie un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Ahora vuelve a subir lentamente"
-            )
-
-    return rep_valida, estado_eval, mensaje
+    return (
+        rep_valida,
+        estado_eval,
+        mensaje
+    )
 
 
 def evaluar_elevacion_pierna_recta(
@@ -809,15 +764,18 @@ def evaluar_elevacion_pierna_recta(
     puntos,
     estado_eval
 ):
+    """
+    Elevación de pierna recta.
+
+    Utiliza la posición inicial calibrada del tobillo.
+    La repetición se completa cuando:
+    1. la pierna se eleva manteniendo la rodilla extendida;
+    2. vuelve cerca de la posición inicial.
+    """
 
     rep_valida = False
 
-    estado_eval[
-        "intento_no_completado_evento"
-    ] = False
-
     if angulo is None:
-
         return (
             rep_valida,
             estado_eval,
@@ -826,153 +784,126 @@ def evaluar_elevacion_pierna_recta(
 
     tobillo_y = puntos["tobillo_norm"][1]
 
-    if estado_eval["base_tobillo_y"] is None:
+    base_tobillo_y = estado_eval.get(
+        "base_tobillo_y"
+    )
 
+    if base_tobillo_y is None:
         estado_eval["base_tobillo_y"] = tobillo_y
+        base_tobillo_y = tobillo_y
 
     diferencia_altura = (
-        estado_eval["base_tobillo_y"]
-        - tobillo_y
+        base_tobillo_y - tobillo_y
     )
 
-    rodilla_extendida = angulo > 145
+    # Más tolerante para adultos mayores.
+    rodilla_extendida = angulo > 140
 
-    pierna_elevada = diferencia_altura > 0.10
-    pierna_abajo = diferencia_altura < 0.04
+    # Antes era 0.10.
+    # Con la calibración podemos aceptar menor amplitud.
+    pierna_elevada = (
+        diferencia_altura > 0.055
+    )
 
-    movimiento_parcial = (
-        diferencia_altura > 0.05
+    # Consideramos que volvió a la posición inicial.
+    pierna_abajo = (
+        diferencia_altura < 0.025
     )
 
     # ------------------------------------------
-    # POSICIÓN INICIAL
+    # PIERNA SUBIENDO / ARRIBA
     # ------------------------------------------
 
-    if estado_eval["fase"] == "inicio":
+    if (
+        rodilla_extendida
+        and
+        pierna_elevada
+        and
+        estado_eval["fase"] in [
+            "inicio",
+            "abajo"
+        ]
+    ):
 
-        if pierna_abajo:
-
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
-
-                estado_eval["fase"] = "abajo"
-
-                mensaje = (
-                    "Posición inicial detectada"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la pierna abajo un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Coloca la pierna en la posición inicial"
-            )
-
-        return rep_valida, estado_eval, mensaje
-
-    # ------------------------------------------
-    # SUBIDA
-    # ------------------------------------------
-
-    if estado_eval["fase"] == "abajo":
-
-        actualizar_inicio_intento(
+        estable = confirmar_fase_estable(
             estado_eval,
-            movimiento_parcial,
-            0.20
+            "arriba",
+            duracion_minima=0.15
         )
 
-        if (
-            pierna_elevada
-            and rodilla_extendida
-        ):
+        if estable:
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
-            ):
+            estado_eval["fase"] = "arriba"
 
-                estado_eval["fase"] = "arriba"
+            mensaje = (
+                "Muy bien, ahora baja la pierna"
+            )
 
-                reiniciar_intento(
-                    estado_eval
-                )
+        else:
 
-                mensaje = (
-                    "Pierna elevada, "
-                    "ahora baja lentamente"
-                )
+            mensaje = (
+                "Mantén la pierna elevada un momento"
+            )
 
-            else:
+    # ------------------------------------------
+    # REGRESO A POSICIÓN INICIAL
+    # ------------------------------------------
 
-                mensaje = (
-                    "Mantén la pierna elevada un momento"
-                )
+    elif (
+        pierna_abajo
+        and
+        estado_eval["fase"] == "arriba"
+    ):
 
-        elif detectar_retorno_sin_completar(
+        estable = confirmar_fase_estable(
             estado_eval,
-            pierna_abajo
-        ):
+            "abajo",
+            duracion_minima=0.15
+        )
+
+        if estable:
+
+            rep_valida = True
+
+            estado_eval["fase"] = "abajo"
 
             mensaje = (
-                "Intenta elevar un poco más la pierna"
-            )
-
-        elif not rodilla_extendida:
-
-            mensaje = (
-                "Mantén la rodilla más extendida"
+                "Repetición válida"
             )
 
         else:
 
             mensaje = (
-                "Eleva la pierna lentamente"
+                "Vuelve a la posición inicial"
             )
 
-    # ------------------------------------------
-    # BAJADA
-    # ------------------------------------------
+    else:
 
-    elif estado_eval["fase"] == "arriba":
+        estado_eval[
+            "fase_candidata"
+        ] = None
 
-        if pierna_abajo:
+        estado_eval[
+            "fase_candidata_desde"
+        ] = None
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+        if not rodilla_extendida:
 
-                rep_valida = True
-                estado_eval["fase"] = "abajo"
-
-                mensaje = (
-                    "Repetición válida: elevación completa"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
+            mensaje = (
+                "Mantén la pierna más recta"
+            )
 
         else:
 
             mensaje = (
-                "Baja lentamente la pierna"
+                "Eleva la pierna con control"
             )
 
-    return rep_valida, estado_eval, mensaje
+    return (
+        rep_valida,
+        estado_eval,
+        mensaje
+    )
 
 
 def evaluar_step_basico(
@@ -1126,135 +1057,137 @@ def evaluar_puente_gluteo(
     puntos,
     estado_eval
 ):
+    """
+    Puente glúteo.
+
+    Movimiento:
+    pelvis en posición inicial
+    -> elevar pelvis
+    -> regresar a posición inicial.
+
+    Se utiliza la referencia de cadera obtenida
+    durante la calibración previa.
+    """
 
     rep_valida = False
 
-    estado_eval[
-        "intento_no_completado_evento"
-    ] = False
+    cadera_y = puntos[
+        "cadera_norm"
+    ][1]
 
-    cadera_y = puntos["cadera_norm"][1]
+    base_cadera_y = estado_eval.get(
+        "base_cadera_y"
+    )
 
-    if estado_eval.get("base_cadera_y") is None:
-        estado_eval["base_cadera_y"] = cadera_y
+    if base_cadera_y is None:
+
+        estado_eval[
+            "base_cadera_y"
+        ] = cadera_y
+
+        base_cadera_y = cadera_y
 
     diferencia_altura = (
-        estado_eval["base_cadera_y"]
-        - cadera_y
+        base_cadera_y
+        -
+        cadera_y
     )
 
-    pelvis_arriba = diferencia_altura > 0.08
-    pelvis_abajo = diferencia_altura < 0.03
-
-    movimiento_parcial = (
-        diferencia_altura > 0.04
+    # Un desplazamiento moderado es suficiente.
+    # Antes era 0.08.
+    pelvis_arriba = (
+        diferencia_altura > 0.045
     )
 
-    if estado_eval["fase"] == "inicio":
+    # Regreso cercano a la referencia inicial.
+    pelvis_abajo = (
+        diferencia_altura < 0.020
+    )
 
-        if pelvis_abajo:
+    # ------------------------------------------
+    # ELEVACIÓN DE PELVIS
+    # ------------------------------------------
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+    if (
+        pelvis_arriba
+        and
+        estado_eval["fase"] in [
+            "inicio",
+            "abajo"
+        ]
+    ):
 
-                estado_eval["fase"] = "abajo"
-                mensaje = "Posición inicial detectada"
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Coloca la pelvis en la posición inicial"
-            )
-
-        return rep_valida, estado_eval, mensaje
-
-    if estado_eval["fase"] == "abajo":
-
-        actualizar_inicio_intento(
+        estable = confirmar_fase_estable(
             estado_eval,
-            movimiento_parcial,
-            0.20
+            "arriba",
+            duracion_minima=0.15
         )
 
-        if pelvis_arriba:
+        if estable:
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
-            ):
+            estado_eval["fase"] = "arriba"
 
-                estado_eval["fase"] = "arriba"
+            mensaje = (
+                "Muy bien, baja la pelvis lentamente"
+            )
 
-                reiniciar_intento(
-                    estado_eval
-                )
+        else:
 
-                mensaje = (
-                    "Puente detectado, "
-                    "baja lentamente"
-                )
+            mensaje = (
+                "Mantén la pelvis elevada un momento"
+            )
 
-            else:
+    # ------------------------------------------
+    # REGRESO
+    # ------------------------------------------
 
-                mensaje = (
-                    "Mantén la pelvis elevada un momento"
-                )
+    elif (
+        pelvis_abajo
+        and
+        estado_eval["fase"] == "arriba"
+    ):
 
-        elif detectar_retorno_sin_completar(
+        estable = confirmar_fase_estable(
             estado_eval,
-            pelvis_abajo
-        ):
+            "abajo",
+            duracion_minima=0.15
+        )
+
+        if estable:
+
+            rep_valida = True
+
+            estado_eval["fase"] = "abajo"
 
             mensaje = (
-                "Intenta elevar un poco más la pelvis"
+                "Repetición válida"
             )
 
         else:
 
             mensaje = (
-                "Eleva la pelvis con control"
+                "Regresa lentamente a la posición inicial"
             )
 
-    elif estado_eval["fase"] == "arriba":
+    else:
 
-        if pelvis_abajo:
+        estado_eval[
+            "fase_candidata"
+        ] = None
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+        estado_eval[
+            "fase_candidata_desde"
+        ] = None
 
-                rep_valida = True
-                estado_eval["fase"] = "abajo"
+        mensaje = (
+            "Eleva la pelvis con control"
+        )
 
-                mensaje = (
-                    "Repetición válida: puente completo"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Baja lentamente la pelvis"
-            )
-
-    return rep_valida, estado_eval, mensaje
+    return (
+        rep_valida,
+        estado_eval,
+        mensaje
+    )
 
 
 def evaluar_abduccion_cadera(
@@ -1693,7 +1626,10 @@ def evaluar_movimiento(ejercicio, angulo, puntos, estado_eval):
         return evaluar_elevacion_pierna_recta(angulo, puntos, estado_eval)
 
     if tipo == "mini_sentadilla":
-        return evaluar_sentadilla(angulo, estado_eval, umbral_bajada=135, umbral_subida=150)
+        return evaluar_sentadilla(
+            angulo,
+            estado_eval
+        )
 
     if tipo == "puente_gluteo":
         return evaluar_puente_gluteo(angulo, puntos, estado_eval)
