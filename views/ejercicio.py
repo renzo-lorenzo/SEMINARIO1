@@ -25,6 +25,8 @@ from utils.evaluacion_movimiento import (
     evaluar_movimiento
 )
 
+from utils.visuales import dibujar_feedback_repeticion
+
 
 mp_pose = mp.solutions.pose
 
@@ -824,7 +826,8 @@ def pantalla_ejercicio():
         # --------------------------------------------------
         # BUCLE PRINCIPAL
         # --------------------------------------------------
-
+        fps_inicio = time.perf_counter()
+        frames_medidos = 0
         while (
             cap.isOpened()
             and
@@ -1049,9 +1052,6 @@ def pantalla_ejercicio():
                         
                         # Mostrar feedback visual aproximadamente
                         # durante un segundo.
-                        feedback_repeticion_hasta = (
-                            time.time() + 1.0
-                        )
 
                         feedback_placeholder.markdown(
                             """
@@ -1126,6 +1126,8 @@ def pantalla_ejercicio():
                             total_repeticiones,
                             ejercicio["id"]
                         )
+                        # Iniciar el aviso visual después de solicitar la voz
+                        feedback_repeticion_hasta = time.time() + 1.8
 
             else:
 
@@ -1154,6 +1156,12 @@ def pantalla_ejercicio():
             # ==================================================
             # MOSTRAR CÁMARA
             # ==================================================
+
+            # Superponer animación cuando se valida una repetición
+            frame = dibujar_feedback_repeticion(
+                frame,
+                feedback_repeticion_hasta
+            )
 
             frame_rgb = cv2.cvtColor(
                 frame,
@@ -1387,7 +1395,16 @@ def pantalla_ejercicio():
             # ==================================================
             # PEQUEÑA PAUSA
             # ==================================================
+            frames_medidos += 1
+            segundos = time.perf_counter() - fps_inicio
 
+            if segundos >= 3:
+                fps_actual = frames_medidos / segundos
+
+                print(f"FPS reales de Activate: {fps_actual:.1f}")
+
+                fps_inicio = time.perf_counter()
+                frames_medidos = 0
             time.sleep(0.03)
 
     # ======================================================

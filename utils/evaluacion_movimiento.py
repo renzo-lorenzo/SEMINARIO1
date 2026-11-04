@@ -316,24 +316,64 @@ def dibujar_solo_pierna(frame, puntos, angulo_actual):
     rodilla = puntos["rodilla"]
     tobillo = puntos["tobillo"]
 
-    cv2.line(frame, cadera, rodilla, (255, 255, 255), 4)
-    cv2.line(frame, rodilla, tobillo, (255, 255, 255), 4)
+    # Colores en formato BGR de OpenCV
+    turquesa = (225, 182, 0)       # Celeste intenso
+    azul = (183, 95, 15)           # Azul principal
+    sombra = (72, 66, 56)          # Gris oscuro
+    blanco = (255, 255, 255)
 
-    cv2.circle(frame, cadera, 8, (0, 0, 255), -1)
-    cv2.circle(frame, rodilla, 10, (0, 255, 255), -1)
-    cv2.circle(frame, tobillo, 8, (0, 0, 255), -1)
-
-    if angulo_actual is not None:
-        cv2.putText(
-            frame,
-            f"{int(angulo_actual)} grados",
-            (rodilla[0] + 20, rodilla[1] + 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (0, 255, 255),
-            2
+    # Conexiones con contorno para mayor visibilidad
+    for inicio, fin in [
+        (cadera, rodilla),
+        (rodilla, tobillo)
+    ]:
+        cv2.line(
+            frame, inicio, fin,
+            sombra, 9, cv2.LINE_AA
         )
 
+        cv2.line(
+            frame, inicio, fin,
+            turquesa, 5, cv2.LINE_AA
+        )
+
+    # Articulaciones grandes y fáciles de identificar
+    for punto in [cadera, rodilla, tobillo]:
+        cv2.circle(
+            frame, punto,
+            12, blanco, -1, cv2.LINE_AA
+        )
+
+        cv2.circle(
+            frame, punto,
+            8, azul, -1, cv2.LINE_AA
+        )
+
+    # Mostrar el ángulo junto a la rodilla
+    if angulo_actual is not None:
+        texto = f"{int(angulo_actual)} grados"
+
+        x = max(
+            10,
+            min(rodilla[0] + 18, frame.shape[1] - 110)
+        )
+
+        y = max(
+            28,
+            min(rodilla[1] - 15, frame.shape[0] - 10)
+        )
+
+        cv2.putText(
+            frame, texto, (x, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65, sombra, 4, cv2.LINE_AA
+        )
+
+        cv2.putText(
+            frame, texto, (x, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65, blanco, 2, cv2.LINE_AA
+        )
 
 def inicializar_estado_evaluacion():
 
