@@ -6,6 +6,7 @@ import math
 import cv2
 import mediapipe as mp
 
+from utils.visuales import dibujar_overlay_calibracion
 from utils.asistente_voz import hablar_indicacion_tutorial
 from utils.evaluacion_movimiento import (
     obtener_muestra_calibracion,
@@ -56,6 +57,21 @@ def _nombre_lado(lado):
         return "izquierda"
 
     return "por definir"
+
+
+def _hay_salto_brusco(muestra_anterior, muestra_actual, umbral=0.09):
+    """Detecta desplazamientos repentinos de los puntos de una pierna.
+
+    Las coordenadas que entrega MediaPipe estan normalizadas (0 a 1).
+    Es un filtro de continuidad, no una prueba de postura correcta.
+    """
+    return any(
+        math.hypot(
+            muestra_actual[f"{parte}_x"] - muestra_anterior[f"{parte}_x"],
+            muestra_actual[f"{parte}_y"] - muestra_anterior[f"{parte}_y"]
+        ) > umbral
+        for parte in ("cadera", "rodilla", "tobillo")
+    )
 
 
 def pantalla_tutorial():
@@ -222,6 +238,12 @@ def pantalla_tutorial():
 
     ultimo_lado_candidato = None
 
+    # Confirmación del mismo lado durante 0,9 s, dentro de los 13 s.
+    lado_en_confirmacion = None
+    inicio_confirmacion = None
+    calibracion_confirmada = False
+    duracion_confirmacion = 0.9
+
     # ======================================================
     # MEDIAPIPE
     # MISMA CONFIGURACIÓN QUE EN EJECUCIÓN
@@ -235,6 +257,9 @@ def pantalla_tutorial():
         min_detection_confidence=0.6,
         min_tracking_confidence=0.6
     ) as pose:
+
+        # Avance visual de la preparación (no modifica MediaPipe).
+        progreso_visual = 0.0
 
         while cap.isOpened():
 
@@ -326,50 +351,61 @@ def pantalla_tutorial():
                     )
                 )
 
-                if muestra_derecha is not None:
-
-                    muestras_por_lado[
-                        "RIGHT"
-                    ].append(
-                        muestra_derecha
-                    )
-
-                if muestra_izquierda is not None:
-
-                    muestras_por_lado[
-                        "LEFT"
-                    ].append(
-                        muestra_izquierda
-                    )
-
                 # ------------------------------------------
-                # CONSERVAR SOLO FRAMES RECIENTES
+                # HISTORIAL RECIENTE Y CONTINUO
                 # ------------------------------------------
+                # Evitamos conservar muestras de orientaciones
+                # anteriores, especialmente después de giros.
+                ahora_muestras = time.monotonic()
+                muestras_actuales = {
+                    "RIGHT": muestra_derecha,
+                    "LEFT": muestra_izquierda,
+                }
 
-                muestras_por_lado[
-                    "RIGHT"
-                ] = (
-                    muestras_por_lado[
-                        "RIGHT"
-                    ][-120:]
+                # Una interrupción mayor a 0,8 s rompe la continuidad.
+                for lado in ("RIGHT", "LEFT"):
+                    historial = muestras_por_lado[lado]
+                    if (
+                        historial
+                        and ahora_muestras - historial[-1]["_instante"] > 0.8
+                    ):
+                        historial.clear()
+
+                # Si una articulación cambia bruscamente de posición,
+                # descartamos las muestras de AMBAS piernas.
+                hay_salto = any(
+                    muestra is not None
+                    and muestras_por_lado[lado]
+                    and _hay_salto_brusco(
+                        muestras_por_lado[lado][-1], muestra
+                    )
+                    for lado, muestra in muestras_actuales.items()
                 )
+                if hay_salto:
+                    muestras_por_lado["RIGHT"].clear()
+                    muestras_por_lado["LEFT"].clear()
 
-                muestras_por_lado[
-                    "LEFT"
-                ] = (
-                    muestras_por_lado[
-                        "LEFT"
+                for lado, muestra in muestras_actuales.items():
+                    historial = muestras_por_lado[lado]
+
+                    if muestra is None:
+                        # No seleccionamos un lado ausente ahora.
+                        historial.clear()
+                        continue
+
+                    muestra_reciente = muestra.copy()
+                    muestra_reciente["_instante"] = ahora_muestras
+                    historial.append(muestra_reciente)
+
+                    # Sólo últimos 6 segundos, hasta 120 fotogramas.
+                    muestras_por_lado[lado] = [
+                        m for m in historial
+                        if ahora_muestras - m["_instante"] <= 6.0
                     ][-120:]
-                )
 
-                # ------------------------------------------
-                # SELECCIONAR MEJOR PIERNA
-                # ------------------------------------------
-
-                lado_candidato = (
-                    seleccionar_lado_calibracion(
-                        muestras_por_lado
-                    )
+                # Mantener función de selección existente.
+                lado_candidato = seleccionar_lado_calibracion(
+                    muestras_por_lado
                 )
 
                 if lado_candidato is not None:
@@ -497,13 +533,112 @@ def pantalla_tutorial():
                     mp_pose.POSE_CONNECTIONS
                 )
 
+            else:
+                # Una pérdida de postura completa invalida la
+                # continuidad; habrá que reunir muestras nuevas.
+                muestras_por_lado["RIGHT"].clear()
+                muestras_por_lado["LEFT"].clear()
+
+            # ==============================================
+            # CONFIRMAR LADO DURANTE 0,9 SEGUNDOS
+            # ==============================================
+            ahora_confirmacion = time.monotonic()
+            if calibracion_actual is None:
+                lado_en_confirmacion = None
+                inicio_confirmacion = None
+                calibracion_confirmada = False
+            else:
+                lado_actual = calibracion_actual["lado"]
+                if lado_actual != lado_en_confirmacion:
+                    lado_en_confirmacion = lado_actual
+                    inicio_confirmacion = ahora_confirmacion
+
+                calibracion_confirmada = (
+                    inicio_confirmacion is not None
+                    and ahora_confirmacion - inicio_confirmacion
+                    >= duracion_confirmacion
+                )
+
+            # ==============================================
+            # TIEMPO DE PREPARACIÓN
+            # ==============================================
+
+            transcurrido = time.time() - tiempo_inicio_preparacion
+            restante = max(
+                math.ceil(duracion_tutorial - transcurrido),
+                0
+            )
+
+            # ==============================================
+            # ESTADO Y PROGRESO VISUAL DE CALIBRACIÓN
+            # ==============================================
+            # Progreso aproximado por etapas: NO indica
+            # porcentaje de exactitud de MediaPipe.
+            pierna_overlay = None
+
+            if not results.pose_landmarks:
+                progreso_objetivo = 10
+                titulo_calibracion = "Buscando tu cuerpo"
+                subtitulo_calibracion = "Ubícate frente a la cámara"
+
+            elif lado_candidato is None:
+                progreso_objetivo = 30
+                titulo_calibracion = "Detectando tus piernas"
+                subtitulo_calibracion = "Mantén las piernas visibles"
+
+            elif calibracion_actual is None:
+                progreso_objetivo = 45 + 30 * min(
+                    transcurrido / duracion_tutorial, 1.0
+                )
+                titulo_calibracion = "Verificando estabilidad"
+                subtitulo_calibracion = "Mantén tu posición unos segundos"
+
+            elif not calibracion_confirmada:
+                progreso_objetivo = 78
+                titulo_calibracion = "Confirmando la pierna"
+                subtitulo_calibracion = "Mantén tu posición un momento"
+
+            elif transcurrido < duracion_tutorial:
+                progreso_objetivo = 80 + 15 * min(
+                    transcurrido / duracion_tutorial, 1.0
+                )
+                titulo_calibracion = "¡Posición estable!"
+                subtitulo_calibracion = "Terminando la preparación"
+                pierna_overlay = _nombre_lado(
+                    calibracion_actual["lado"]
+                ).upper()
+
+            else:
+                progreso_objetivo = 100
+                titulo_calibracion = "¡Listo para comenzar!"
+                subtitulo_calibracion = "Preparación completada"
+                pierna_overlay = _nombre_lado(
+                    calibracion_actual["lado"]
+                ).upper()
+
+            # Animar el llenado. Si se pierde detección,
+            # retrocede para reflejar la nueva situación.
+            if progreso_objetivo == 100:
+                progreso_visual = 100.0
+            else:
+                progreso_visual += (
+                    progreso_objetivo - progreso_visual
+                ) * 0.25
+
+            frame = dibujar_overlay_calibracion(
+                frame,
+                progreso=round(progreso_visual),
+                titulo=titulo_calibracion,
+                subtitulo=subtitulo_calibracion,
+                pierna_texto=pierna_overlay
+            )
+
             # ==============================================
             # MOSTRAR CÁMARA
             # ==============================================
 
             frame_rgb = cv2.cvtColor(
-                frame,
-                cv2.COLOR_BGR2RGB
+                frame, cv2.COLOR_BGR2RGB
             )
 
             camara_placeholder.image(
@@ -513,106 +648,19 @@ def pantalla_tutorial():
             )
 
             # ==============================================
-            # TIEMPO DE PREPARACIÓN
-            # ==============================================
-
-            transcurrido = (
-                time.time()
-                -
-                tiempo_inicio_preparacion
-            )
-
-            restante = max(
-                math.ceil(
-                    duracion_tutorial
-                    -
-                    transcurrido
-                ),
-                0
-            )
-
-            # ==============================================
-            # MENSAJES DE PREPARACIÓN
-            # ==============================================
-
-            if not results.pose_landmarks:
-
-                estado_placeholder.warning(
-                    "Buscando tu cuerpo. "
-                    "Mantente visible frente a la cámara."
-                )
-
-            elif calibracion_actual is None:
-
-                texto_lado = _nombre_lado(
-                    ultimo_lado_candidato
-                )
-
-                estado_placeholder.info(
-                    "Cuerpo detectado. "
-                    "Mantén la posición inicial un momento. "
-                    f"Pierna candidata: {texto_lado}."
-                )
-
-            else:
-
-                texto_lado = _nombre_lado(
-                    calibracion_actual[
-                        "lado"
-                    ]
-                )
-
-                estado_placeholder.success(
-                    "Posición inicial estable detectada. "
-                    f"Pierna seleccionada: {texto_lado}."
-                )
-
-            # ==============================================
-            # CUENTA REGRESIVA
+            # FINALIZAR CUANDO YA ESTÉ LISTA LA CALIBRACIÓN
             # ==============================================
 
             if (
-                transcurrido
-                <
-                duracion_tutorial
+                transcurrido >= duracion_tutorial
+                and calibracion_actual is not None
+                and calibracion_confirmada
             ):
+                st.session_state[
+                    "calibracion_ejercicio"
+                ] = calibracion_actual.copy()
 
-                contador_placeholder.info(
-                    "Preparando el ejercicio... "
-                    f"{restante} s"
-                )
-
-            else:
-
-                # Los 13 segundos terminaron.
-                # Solo avanzamos si EN ESE MOMENTO
-                # existe una referencia estable.
-
-                if (
-                    calibracion_actual
-                    is not None
-                ):
-
-                    st.session_state[
-                        "calibracion_ejercicio"
-                    ] = (
-                        calibracion_actual.copy()
-                    )
-
-                    break
-
-                contador_placeholder.warning(
-                    "El tutorial terminó. "
-                    "Mantén la posición inicial "
-                    "unos segundos más para completar "
-                    "la preparación."
-                )
-
-            # Pequeña pausa para no saturar CPU.
-
-            time.sleep(
-                0.03
-            )
+                break
 
     # ======================================================
     # CERRAR CÁMARA

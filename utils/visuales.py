@@ -138,3 +138,163 @@ def dibujar_feedback_repeticion(frame, hasta, duracion=1.8):
         np.asarray(resultado),
         cv2.COLOR_RGB2BGR
     )
+
+def dibujar_overlay_calibracion(
+    frame,
+    progreso=0,
+    titulo="Calibrando tu posición...",
+    subtitulo="Preparando el reconocimiento corporal...",
+    porcentaje_texto=None,
+    pierna_texto=None
+):
+    """
+    Dibuja una tarjeta centrada de calibración con barra de progreso.
+    `progreso` debe estar entre 0 y 100.
+    """
+
+    progreso = max(0, min(100, int(progreso)))
+
+    if porcentaje_texto is None:
+        porcentaje_texto = f"{progreso}%"
+
+    alto, ancho = frame.shape[:2]
+
+    # Convertir frame a PIL
+    fondo = Image.fromarray(
+        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    ).convert("RGBA")
+
+    capa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
+    dibujo = ImageDraw.Draw(capa)
+
+    # Fuentes
+    try:
+        fuente_titulo = ImageFont.truetype("arialbd.ttf", 23)
+        fuente_sub = ImageFont.truetype("arial.ttf", 15)
+        fuente_label = ImageFont.truetype("arial.ttf", 14)
+        fuente_pierna = ImageFont.truetype("arialbd.ttf", 17)
+        fuente_pct = ImageFont.truetype("arialbd.ttf", 14)
+    except:
+        fuente_titulo = ImageFont.load_default()
+        fuente_sub = ImageFont.load_default()
+        fuente_label = ImageFont.load_default()
+        fuente_pierna = ImageFont.load_default()
+        fuente_pct = ImageFont.load_default()
+
+    # Tarjeta más compacta
+    card_w = min(430, int(ancho * 0.58))
+    card_h = 168 if pierna_texto else 145
+
+    x1 = (ancho - card_w) // 2
+    y1 = (alto - card_h) // 2
+    x2 = x1 + card_w
+    y2 = y1 + card_h
+
+    # Sombra suave
+    dibujo.rounded_rectangle(
+        (x1 + 5, y1 + 6, x2 + 5, y2 + 6),
+        radius=22,
+        fill=(20, 48, 77, 40)
+    )
+
+    # Tarjeta principal ligeramente transparente
+    dibujo.rounded_rectangle(
+        (x1, y1, x2, y2),
+        radius=22,
+        fill=(255, 255, 255, 212),
+        outline=(89, 201, 255, 235),
+        width=3
+    )
+
+    # Ícono simple
+    icono_y = y1 + 22
+    icono_x = ancho // 2
+
+    dibujo.ellipse(
+        (icono_x - 10, icono_y - 10, icono_x + 10, icono_y + 10),
+        fill=(76, 186, 255, 235)
+    )
+
+    dibujo.ellipse(
+        (icono_x - 4, icono_y - 4, icono_x + 4, icono_y + 4),
+        fill=(255, 255, 255, 255)
+    )
+
+    # Título
+    dibujo.text(
+        (ancho // 2, y1 + 50),
+        titulo,
+        font=fuente_titulo,
+        fill=(43, 74, 117, 255),
+        anchor="mm"
+    )
+
+    # Subtítulo
+    dibujo.text(
+        (ancho // 2, y1 + 76),
+        subtitulo,
+        font=fuente_sub,
+        fill=(76, 111, 149, 255),
+        anchor="mm"
+    )
+
+    # Texto de pierna si ya fue determinada
+    if pierna_texto:
+        dibujo.text(
+            (ancho // 2, y1 + 100),
+            "Pierna a utilizar:",
+            font=fuente_label,
+            fill=(90, 115, 145, 255),
+            anchor="mm"
+        )
+
+        dibujo.text(
+            (ancho // 2, y1 + 120),
+            pierna_texto,
+            font=fuente_pierna,
+            fill=(22, 64, 114, 255),
+            anchor="mm"
+        )
+
+        by1 = y1 + 136
+    else:
+        by1 = y1 + 103
+
+    by2 = by1 + 14
+    barra_margin = 36
+    bx1 = x1 + barra_margin
+    bx2 = x2 - barra_margin
+
+    # Fondo barra
+    dibujo.rounded_rectangle(
+        (bx1, by1, bx2, by2),
+        radius=8,
+        fill=(225, 236, 247, 245)
+    )
+
+    # Progreso barra
+    ancho_progreso = int((bx2 - bx1) * (progreso / 100))
+    if ancho_progreso > 0:
+        dibujo.rounded_rectangle(
+            (bx1, by1, bx1 + ancho_progreso, by2),
+            radius=8,
+            fill=(76, 186, 255, 255)
+        )
+
+    # Porcentaje
+    dibujo.text(
+        (ancho // 2, by2 + 14),
+        porcentaje_texto,
+        font=fuente_pct,
+        fill=(76, 111, 149, 255),
+        anchor="mm"
+    )
+
+    resultado = Image.alpha_composite(
+        fondo, capa
+    ).convert("RGB")
+
+    return cv2.cvtColor(
+        np.array(resultado),
+        cv2.COLOR_RGB2BGR
+    )

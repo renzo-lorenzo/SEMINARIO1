@@ -656,7 +656,19 @@ def pantalla_ejercicio():
 
         animacion_placeholder = st.empty()
 
-        resultados_placeholder = st.empty()
+        # Crear el panel de resultados una sola vez
+        st.markdown("### Resultados")
+
+        col_rep, col_est, col_tiempo = st.columns(3)
+
+        with col_rep:
+            repeticiones_placeholder = st.empty()
+
+        with col_est:
+            estrellas_placeholder = st.empty()
+
+        with col_tiempo:
+            tiempo_placeholder = st.empty()
 
         # Feedback gamificado que aparece
         # cuando se reconoce una repetición.
@@ -796,6 +808,19 @@ def pantalla_ejercicio():
 
     tiempo_inicio = time.time()
 
+    # ======================================================
+    # CONTROL DE ACTUALIZACIONES VISUALES
+    # ======================================================
+
+    ultimo_rep_mostrado = None
+    ultimas_estrellas_mostradas = None
+    ultimo_tiempo_mostrado = None
+
+    ultimo_progreso_mostrado = None
+    ultimo_estado_mostrado = None
+
+    ultima_actualizacion_angulo = 0.0
+
     duracion_maxima = max(
         int(duracion_configurada),
         10
@@ -823,11 +848,12 @@ def pantalla_ejercicio():
         min_tracking_confidence=0.6
     ) as pose:
 
+        fps_inicio = time.perf_counter()
+        frames_medidos = 0
+
         # --------------------------------------------------
         # BUCLE PRINCIPAL
         # --------------------------------------------------
-        fps_inicio = time.perf_counter()
-        frames_medidos = 0
         while (
             cap.isOpened()
             and
@@ -1194,44 +1220,47 @@ def pantalla_ejercicio():
                 total_repeticiones,
                 1.0
             )
-
+    
             # ==================================================
-            # RESULTADOS EN TIEMPO REAL
+            # RESULTADOS EN TIEMPO REAL (OPTIMIZADOS)
             # ==================================================
 
-            with resultados_placeholder.container():
+            tiempo_restante = max(
+                duracion_maxima - tiempo_actual,
+                0
+            )
 
-                st.markdown(
-                    "### Resultados"
+            # Actualizar repeticiones únicamente cuando cambien
+            if repeticiones != ultimo_rep_mostrado:
+
+                repeticiones_placeholder.metric(
+                    "Repeticiones",
+                    f"{repeticiones}/{total_repeticiones}"
                 )
 
-                tiempo_restante = max(
-                    duracion_maxima - tiempo_actual,
-                    0
+                ultimo_rep_mostrado = repeticiones
+
+
+            # Actualizar estrellas únicamente cuando cambien
+            if estrellas_ganadas != ultimas_estrellas_mostradas:
+
+                estrellas_placeholder.metric(
+                    "Estrellas",
+                    estrellas_ganadas
                 )
 
-                col1, col2, col3 = st.columns(3)
+                ultimas_estrellas_mostradas = estrellas_ganadas
 
-                with col1:
 
-                    st.metric(
-                        "Repeticiones",
-                        f"{repeticiones}/{total_repeticiones}"
-                    )
+            # Actualizar tiempo únicamente cuando cambie el segundo
+            if tiempo_restante != ultimo_tiempo_mostrado:
 
-                with col2:
+                tiempo_placeholder.metric(
+                    "Tiempo restante",
+                    f"{tiempo_restante} s"
+                )
 
-                    st.metric(
-                        "Estrellas",
-                        estrellas_ganadas
-                    )
-
-                with col3:
-
-                    st.metric(
-                        "Tiempo restante",
-                        f"{tiempo_restante} s"
-                    )
+                ultimo_tiempo_mostrado = tiempo_restante
 
             # ==================================================
             # FEEDBACK GAMIFICADO
@@ -1258,40 +1287,55 @@ def pantalla_ejercicio():
 
                 feedback_repeticion_hasta = 0
 
-                feedback_repeticion_hasta = 0
-
-
             # ==================================================
             # BARRA DE PROGRESO
             # ==================================================
 
-            barra_progreso_placeholder.progress(
-                progreso
-            )
+            if progreso != ultimo_progreso_mostrado:
 
-            estado_placeholder.caption(
-                f"Estado: {estado_movimiento}"
-            )
-
-            # ==================================================
-            # ÁNGULO ACTUAL
-            # ==================================================
-
-            if angulo_actual is not None:
-
-                angulo_texto = (
-                    f"{round(angulo_actual, 1)}°"
+                barra_progreso_placeholder.progress(
+                    progreso
                 )
 
-            else:
+                ultimo_progreso_mostrado = progreso
 
-                angulo_texto = "-"
+            # ==================================================
+            # ESTADO DEL MOVIMIENTO
+            # ==================================================
 
+            if estado_movimiento != ultimo_estado_mostrado:
 
-            angulo_placeholder.metric(
-                "Ángulo",
-                angulo_texto
-            )
+                estado_placeholder.caption(
+                    f"Estado: {estado_movimiento}"
+                )
+
+                ultimo_estado_mostrado = estado_movimiento
+
+            # ==================================================
+            # ÁNGULO DEL PANEL LATERAL
+            # ==================================================
+
+            ahora_angulo = time.monotonic()
+
+            # Actualizar el panel aproximadamente cada 250 ms
+            if ahora_angulo - ultima_actualizacion_angulo >= 0.25:
+
+                if angulo_actual is not None:
+
+                    angulo_texto = (
+                        f"{round(angulo_actual, 1)}°"
+                    )
+
+                else:
+
+                    angulo_texto = "-"
+
+                angulo_placeholder.metric(
+                    "Ángulo",
+                    angulo_texto
+                )
+
+                ultima_actualizacion_angulo = ahora_angulo
 
             # ==================================================
             # EJERCICIO COMPLETADO
