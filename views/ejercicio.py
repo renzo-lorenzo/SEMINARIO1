@@ -31,6 +31,230 @@ from utils.visuales import dibujar_feedback_repeticion
 mp_pose = mp.solutions.pose
 
 
+def identidad_abduccion_confiable(
+    puntos_elegida,
+    puntos_otra,
+    estado,
+    base_x,
+    ahora
+):
+    """
+    Comprueba que la pierna evaluada conserve su
+    posición física respecto de la otra pierna.
+    """
+
+    if puntos_elegida is None or puntos_otra is None:
+        estado.pop("_abd_orden_candidato", None)
+        estado.pop("_abd_orden_desde", None)
+        return False
+
+    x_elegida = puntos_elegida["tobillo_norm"][0]
+    x_otra = puntos_otra["tobillo_norm"][0]
+
+
+    diferencia = x_elegida - x_otra
+
+    # Cuando los tobillos están próximos,
+    # comprobar también rodillas y caderas.
+    if abs(diferencia) < 0.04:
+
+        diferencia_rodillas = (
+            puntos_elegida["rodilla_norm"][0]
+            - puntos_otra["rodilla_norm"][0]
+        )
+
+        if abs(diferencia_rodillas) >= 0.02:
+
+            diferencia = diferencia_rodillas
+
+        else:
+
+            diferencia_caderas = (
+                puntos_elegida["cadera_norm"][0]
+                - puntos_otra["cadera_norm"][0]
+            )
+
+            if abs(diferencia_caderas) < 0.035:
+
+                estado.pop("_abd_orden_candidato", None)
+                estado.pop("_abd_orden_desde", None)
+                return False
+
+            diferencia = diferencia_caderas
+
+
+    orden_actual = 1 if diferencia > 0 else -1
+    orden_fijo = estado.get("_abd_orden_fijo")
+
+    # Establecer la identidad física inicial.
+    if orden_fijo is None:
+
+        # Comprobar coherencia con la calibración.
+        if (
+            base_x is not None
+            and abs(x_elegida - base_x)
+            > abs(x_otra - base_x) + 0.02
+        ):
+            estado.pop("_abd_orden_candidato", None)
+            estado.pop("_abd_orden_desde", None)
+            return False
+
+        if estado.get("_abd_orden_candidato") != orden_actual:
+            estado["_abd_orden_candidato"] = orden_actual
+            estado["_abd_orden_desde"] = ahora
+            return False
+
+        # Exigir 0,4 segundos de identificación estable.
+        if ahora - estado["_abd_orden_desde"] < 0.4:
+            return False
+
+        estado["_abd_orden_fijo"] = orden_actual
+
+    # Nunca aceptar una inversión del orden fijado.
+    return orden_actual == estado["_abd_orden_fijo"]
+
+def identidad_extension_confiable(
+    elegida, otra, estado, base_x, ahora
+):
+    """
+    Mantiene la pierna calibrada durante la extensión
+    de rodilla sentado, sin cambiar a la contraria.
+    """
+
+    if elegida is None:
+        return False
+
+    # La cadera y la rodilla son más estables
+    # que el tobillo durante este ejercicio.
+    orden_actual = None
+
+    if otra is not None:
+        dx_cadera = (
+            elegida["cadera_norm"][0]
+            - otra["cadera_norm"][0]
+        )
+
+        dx_rodilla = (
+            elegida["rodilla_norm"][0]
+            - otra["rodilla_norm"][0]
+        )
+
+        diferencia = (
+            dx_cadera
+            if abs(dx_cadera) >= 0.025
+            else dx_rodilla
+        )
+
+        if abs(diferencia) >= 0.025:
+            orden_actual = 1 if diferencia > 0 else -1
+
+    orden_fijo = estado.get("_ext_orden_fijo")
+
+    # Confirmar la identidad al comenzar.
+    if orden_fijo is None:
+
+        if orden_actual is None:
+            return False
+
+        # Comprobar la posición inicial calibrada.
+        if base_x is not None:
+            x_elegida = elegida["tobillo_norm"][0]
+            x_otra = otra["tobillo_norm"][0]
+
+            if (
+                abs(x_elegida - base_x)
+                > abs(x_otra - base_x) + 0.025
+            ):
+                estado.pop("_ext_orden_candidato", None)
+                estado.pop("_ext_orden_desde", None)
+                return False
+
+        if estado.get("_ext_orden_candidato") != orden_actual:
+            estado["_ext_orden_candidato"] = orden_actual
+            estado["_ext_orden_desde"] = ahora
+            return False
+
+        if ahora - estado["_ext_orden_desde"] < 0.35:
+            return False
+
+        estado["_ext_orden_fijo"] = orden_actual
+
+    elif (
+        orden_actual is not None
+        and orden_actual != orden_fijo
+    ):
+        return False
+
+    # Verificar continuidad de la pierna.
+    ultima = estado.get("_ext_ultima_posicion")
+    tiempo_ultima = estado.get("_ext_ultimo_tiempo")
+
+    # Si la otra pierna desaparece, aceptar únicamente
+    # una identificación reciente de la pierna elegida.
+    if otra is None and (
+        ultima is None
+        or tiempo_ultima is None
+        or ahora - tiempo_ultima > 0.6
+    ):
+        return False
+
+    if (
+        ultima is not None
+        and tiempo_ultima is not None
+        and ahora - tiempo_ultima <= 0.6
+    ):
+
+        def distancia(p, q):
+            return (
+                (p[0] - q[0]) ** 2
+                + (p[1] - q[1]) ** 2
+            ) ** 0.5
+
+        # Rechazar saltos bruscos de cadera o rodilla.
+        if (
+            distancia(
+                elegida["cadera_norm"],
+                ultima["cadera"]
+            ) > 0.09
+            or distancia(
+                elegida["rodilla_norm"],
+                ultima["rodilla"]
+            ) > 0.09
+        ):
+            return False
+
+        # Detectar si MediaPipe trasladó el tobillo
+        # seleccionado hacia la otra pierna.
+        if otra is not None:
+
+            salto = distancia(
+                elegida["tobillo_norm"],
+                ultima["tobillo"]
+            )
+
+            alternativa = distancia(
+                otra["tobillo_norm"],
+                ultima["tobillo"]
+            )
+
+            if (
+                salto > 0.12
+                and alternativa < 0.05
+                and alternativa + 0.05 < salto
+            ):
+                return False
+
+    # Guardar los puntos confiables más recientes.
+    estado["_ext_ultima_posicion"] = {
+        "cadera": elegida["cadera_norm"],
+        "rodilla": elegida["rodilla_norm"],
+        "tobillo": elegida["tobillo_norm"]
+    }
+
+    estado["_ext_ultimo_tiempo"] = ahora
+
+    return True
+
 # ==========================================================
 # VIDEO DE ANIMACIÓN
 # ==========================================================
@@ -932,6 +1156,185 @@ def pantalla_ejercicio():
                     lado=lado_calibrado
                 )
 
+                
+                # ------------------------------------------
+                # PROTEGER LA IDENTIDAD EN ABDUCCIÓN
+                # ------------------------------------------
+
+                if ejercicio.get("tipo_evaluacion") == "abduccion_cadera":
+
+                    lado_opuesto = (
+                        "RIGHT"
+                        if lado_calibrado == "LEFT"
+                        else "LEFT"
+                    )
+
+                    # La otra pierna se utiliza únicamente
+                    # para comprobar la identidad.
+                    puntos_otra = obtener_puntos_pierna(
+                        landmarks=landmarks,
+                        width=width,
+                        height=height,
+                        lado=lado_opuesto
+                    )
+
+                    identidad_correcta = identidad_abduccion_confiable(
+                        puntos_pierna,
+                        puntos_otra,
+                        estado_eval,
+                        calibracion.get("base_tobillo_x"),
+                        time.monotonic()
+                    )
+
+
+                    if not identidad_correcta:
+
+                        # No dibujar ni evaluar una pierna dudosa.
+                        puntos_pierna = None
+
+                        # Cancelar confirmaciones incompletas.
+                        estado_eval["fase_candidata"] = None
+                        estado_eval["fase_candidata_desde"] = None
+
+                        # Registrar cuánto tiempo lleva perdida
+                        # la identificación de la pierna.
+                        ahora_perdida = time.monotonic()
+
+                        inicio_perdida = estado_eval.get(
+                            "_abd_perdida_desde"
+                        )
+
+                        if inicio_perdida is None:
+                            estado_eval["_abd_perdida_desde"] = ahora_perdida
+
+                        elif ahora_perdida - inicio_perdida >= 1.0:
+
+                            # Solo reiniciar si la pérdida
+                            # dura al menos un segundo.
+                            estado_eval["fase"] = "inicio"
+                            estado_eval["intento_activo"] = False
+                            estado_eval["intento_candidato_desde"] = None
+
+                    else:
+
+                        # Identificación recuperada.
+                        estado_eval.pop("_abd_perdida_desde", None)
+
+                # ==========================================
+                # MARCHA EN EL SITIO: DETECTAR AMBAS PIERNAS
+                # ==========================================
+
+                if (
+                    ejercicio.get("tipo_evaluacion") == "marcha_sitio"
+                    and puntos_pierna is not None
+                ):
+
+                    otro_lado = (
+                        "LEFT" if lado_calibrado == "RIGHT"
+                        else "RIGHT"
+                    )
+
+                    puntos_otra = obtener_puntos_pierna(
+                        landmarks=landmarks,
+                        width=width,
+                        height=height,
+                        lado=otro_lado
+                    )
+
+                    if puntos_otra is None:
+                        puntos_pierna = None
+
+                    else:
+                        # Evitar aceptar una inversión evidente
+                        # de las etiquetas izquierda y derecha.
+                        diferencia_caderas = (
+                            puntos_pierna["cadera_norm"][0]
+                            - puntos_otra["cadera_norm"][0]
+                        )
+
+                        if abs(diferencia_caderas) >= 0.035:
+
+                            orden_actual = (
+                                1 if diferencia_caderas > 0 else -1
+                            )
+
+                            orden_fijo = estado_eval.get(
+                                "_marcha_orden_caderas"
+                            )
+
+                            if orden_fijo is None:
+                                estado_eval[
+                                    "_marcha_orden_caderas"
+                                ] = orden_actual
+
+                            elif orden_actual != orden_fijo:
+                                puntos_pierna = None
+
+                        if puntos_pierna is not None:
+                            puntos_pierna = dict(puntos_pierna)
+                            puntos_pierna["lado"] = lado_calibrado
+                            puntos_pierna["contraria"] = puntos_otra
+
+                
+                # ==========================================
+                # EXTENSIÓN SENTADO: PROTEGER LA PIERNA
+                # ==========================================
+
+                if ejercicio.get("tipo_evaluacion") == "extension_rodilla":
+
+                    otro_lado = (
+                        "RIGHT" if lado_calibrado == "LEFT"
+                        else "LEFT"
+                    )
+
+                    puntos_otra_ext = obtener_puntos_pierna(
+                        landmarks=landmarks,
+                        width=width,
+                        height=height,
+                        lado=otro_lado
+                    )
+
+                    confiable_ext = identidad_extension_confiable(
+                        puntos_pierna,
+                        puntos_otra_ext,
+                        estado_eval,
+                        calibracion.get("base_tobillo_x"),
+                        time.monotonic()
+                    )
+
+                    if not confiable_ext:
+
+                        # Evitar dibujar o evaluar una pierna
+                        # cuya identidad sea dudosa.
+                        puntos_pierna = None
+
+                        # Cancelar confirmaciones incompletas.
+                        estado_eval["fase_candidata"] = None
+                        estado_eval["fase_candidata_desde"] = None
+
+                        ahora_perdida = time.monotonic()
+
+                        inicio = estado_eval.setdefault(
+                            "_ext_perdida_desde",
+                            ahora_perdida
+                        )
+
+                        # No reiniciar la fase por pérdidas breves.
+                        if ahora_perdida - inicio >= 1.0:
+
+                            estado_eval["fase"] = "inicio"
+                            estado_eval["intento_activo"] = False
+                            estado_eval["intento_candidato_desde"] = None
+                            estado_eval["angulo_max_intento"] = None
+
+                    else:
+
+                        # La identidad fue recuperada.
+                        estado_eval.pop(
+                            "_ext_perdida_desde",
+                            None
+                        )
+
                 # ------------------------------------------
                 # NO DETECTÓ LA PIERNA
                 # ------------------------------------------
@@ -975,6 +1378,20 @@ def pantalla_ejercicio():
                     # como una nueva indicación.
 
                     incidencia_deteccion_activa = False
+
+                    # STEP BÁSICO: obtener también la otra pierna
+                    if ejercicio.get("tipo_evaluacion") == "step_basico":
+                        lado_contrario = (
+                            "LEFT" if lado_calibrado == "RIGHT" else "RIGHT"
+                        )
+
+                        puntos_pierna["lado"] = lado_calibrado
+                        puntos_pierna["contraria"] = obtener_puntos_pierna(
+                            landmarks=landmarks,
+                            width=width,
+                            height=height,
+                            lado=lado_contrario
+                        )
 
                     punto_cadera = (
                         puntos_pierna["cadera"]
@@ -1021,6 +1438,15 @@ def pantalla_ejercicio():
                     # --------------------------------------
                     # DIBUJAR PIERNA
                     # --------------------------------------
+                    # Mostrar también la segunda pierna
+                    # únicamente durante Marcha en el sitio.
+                    if ejercicio.get("tipo_evaluacion") == "marcha_sitio":
+
+                        dibujar_solo_pierna(
+                            frame=frame,
+                            puntos=puntos_pierna["contraria"],
+                            angulo_actual=None
+                        )
 
                     dibujar_solo_pierna(
                         frame=frame,

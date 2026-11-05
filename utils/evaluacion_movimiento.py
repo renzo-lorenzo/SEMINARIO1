@@ -946,150 +946,133 @@ def evaluar_elevacion_pierna_recta(
     )
 
 
-def evaluar_step_basico(
-    angulo,
-    puntos,
-    estado_eval
-):
 
-    rep_valida = False
+def evaluar_step_basico(angulo, puntos, estado_eval):
+    """Reconoce suelo -> un pie arriba -> dos pies arriba -> suelo."""
+    estado_eval["intento_no_completado_evento"] = False
 
-    estado_eval[
-        "intento_no_completado_evento"
-    ] = False
+    contrario = puntos.get("contraria") if puntos else None
+    if contrario is None:
+        estado_eval.pop("_step_candidato", None)
+        estado_eval.pop("_step_desde", None)
+        return False, estado_eval, "Mantén visibles ambas piernas"
 
-    if angulo is None:
+    ahora = time.monotonic()
+    ultima = estado_eval.get("_step_ultima_deteccion")
 
-        return (
-            rep_valida,
-            estado_eval,
-            "No se detecta correctamente la pierna"
-        )
+    if ultima is not None and ahora - ultima > 1.5:
+        estado_eval["fase"] = "inicio"
+        estado_eval.pop("_step_base", None)
+        estado_eval.pop("_step_candidato", None)
+        estado_eval.pop("_step_desde", None)
 
-    tobillo_y = puntos["tobillo_norm"][1]
+    estado_eval["_step_ultima_deteccion"] = ahora
 
-    if estado_eval["base_tobillo_y"] is None:
-        estado_eval["base_tobillo_y"] = tobillo_y
+    if puntos.get("lado") == "LEFT":
+        izquierda, derecha = puntos, contrario
+    else:
+        izquierda, derecha = contrario, puntos
 
-    diferencia_altura = (
-        estado_eval["base_tobillo_y"]
-        - tobillo_y
+    tobillo_izq = izquierda["tobillo_norm"][1]
+    tobillo_der = derecha["tobillo_norm"][1]
+    cadera = (
+        izquierda["cadera_norm"][1] + derecha["cadera_norm"][1]
+    ) / 2
+
+    escala = (
+        abs(izquierda["cadera_norm"][1] - tobillo_izq)
+        + abs(derecha["cadera_norm"][1] - tobillo_der)
+    ) / 2
+    escala = max(0.14, escala)
+
+    umbral_pie = max(0.045, 0.17 * escala)
+    umbral_cadera = max(0.026, 0.10 * escala)
+    tolerancia = max(0.025, 0.09 * escala)
+
+    if "_step_base" not in estado_eval:
+        estado_eval["_step_base"] = (tobillo_izq, tobillo_der, cadera)
+
+    base_izq, base_der, base_cadera = estado_eval["_step_base"]
+    elevacion_izq = base_izq - tobillo_izq
+    elevacion_der = base_der - tobillo_der
+    elevacion_cadera = base_cadera - cadera
+
+    solo_uno = (
+        (elevacion_izq > umbral_pie and elevacion_der < 0.65 * umbral_pie)
+        or (elevacion_der > umbral_pie and elevacion_izq < 0.65 * umbral_pie)
     )
 
-    subio = (
-        diferencia_altura > 0.08
-        and angulo > 130
+    ambos_arriba = (
+        elevacion_izq > umbral_pie
+        and elevacion_der > umbral_pie
+        and elevacion_cadera > umbral_cadera
     )
 
-    bajo = diferencia_altura < 0.03
-
-    movimiento_parcial = (
-        diferencia_altura > 0.04
+    ambos_abajo = (
+        abs(elevacion_izq) < tolerancia
+        and abs(elevacion_der) < tolerancia
+        and abs(elevacion_cadera) < max(0.038, 0.12 * escala)
     )
 
-    if estado_eval["fase"] == "inicio":
+    def confirmar(etapa, condicion, duracion):
+        if not condicion:
+            estado_eval.pop("_step_candidato", None)
+            estado_eval.pop("_step_desde", None)
+            return False
 
-        if bajo:
+        if estado_eval.get("_step_candidato") != etapa:
+            estado_eval["_step_candidato"] = etapa
+            estado_eval["_step_desde"] = ahora
+            return False
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+        if ahora - estado_eval["_step_desde"] >= duracion:
+            estado_eval.pop("_step_candidato", None)
+            estado_eval.pop("_step_desde", None)
+            return True
 
-                estado_eval["fase"] = "abajo"
-                mensaje = "Posición inicial detectada"
+        return False
 
-            else:
+    fase = estado_eval["fase"]
 
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
+    if fase == "inicio":
+        if confirmar("inicio", ambos_abajo, 0.25):
+            estado_eval["fase"] = "abajo"
+        return False, estado_eval, "Comienza con ambos pies en el suelo"
 
-        else:
+    if fase == "abajo":
+        if confirmar("primero", solo_uno, 0.12):
+            estado_eval["fase"] = "subiendo"
+            return False, estado_eval, "Ahora sube el segundo pie"
+        return False, estado_eval, "Coloca un pie sobre el escalón"
 
-            mensaje = "Colócate en la posición inicial"
+    if fase == "subiendo":
+        if confirmar("ambos", ambos_arriba, 0.20):
+            estado_eval["fase"] = "arriba"
+            return False, estado_eval, "Ambos pies arriba; baja con control"
 
-        return rep_valida, estado_eval, mensaje
+        if ambos_abajo:
+            estado_eval["fase"] = "abajo"
+            estado_eval["intento_no_completado_evento"] = True
+            return False, estado_eval, "Intenta completar la subida"
 
-    if estado_eval["fase"] == "abajo":
+        return False, estado_eval, "Sube el otro pie y eleva el cuerpo"
 
-        actualizar_inicio_intento(
-            estado_eval,
-            movimiento_parcial,
-            0.20
-        )
+    if fase == "arriba":
+        if elevacion_izq < 0.6 * umbral_pie or elevacion_der < 0.6 * umbral_pie:
+            estado_eval["fase"] = "bajando"
+            estado_eval.pop("_step_candidato", None)
+            estado_eval.pop("_step_desde", None)
+        return False, estado_eval, "Baja un pie y después el otro"
 
-        if subio:
+    if fase == "bajando":
+        if confirmar("fin", ambos_abajo, 0.24):
+            estado_eval["fase"] = "abajo"
+            return True, estado_eval, "Step completo"
+        return False, estado_eval, "Vuelve con ambos pies al suelo"
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
-            ):
+    estado_eval["fase"] = "inicio"
+    return False, estado_eval, "Colócate frente al escalón"
 
-                estado_eval["fase"] = "arriba"
-
-                reiniciar_intento(
-                    estado_eval
-                )
-
-                mensaje = (
-                    "Subida detectada, "
-                    "ahora baja con control"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la subida un momento"
-                )
-
-        elif detectar_retorno_sin_completar(
-            estado_eval,
-            bajo
-        ):
-
-            mensaje = (
-                "Intenta completar un poco más la subida"
-            )
-
-        else:
-
-            mensaje = (
-                "Realiza la subida de forma controlada"
-            )
-
-    elif estado_eval["fase"] == "arriba":
-
-        if bajo:
-
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
-
-                rep_valida = True
-                estado_eval["fase"] = "abajo"
-
-                mensaje = (
-                    "Repetición válida: step completo"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Baja de forma controlada"
-            )
-
-    return rep_valida, estado_eval, mensaje
 
 
 def evaluar_puente_gluteo(
@@ -1242,26 +1225,68 @@ def evaluar_abduccion_cadera(
         "intento_no_completado_evento"
     ] = False
 
-    tobillo_x = puntos["tobillo_norm"][0]
+    # ==============================================
+    # ABDUCCIÓN: DESPLAZAMIENTO RELATIVO A LA CADERA
+    # ==============================================
 
-    if estado_eval["base_tobillo_x"] is None:
-        estado_eval["base_tobillo_x"] = tobillo_x
+    cadera_x, cadera_y = puntos["cadera_norm"]
+    tobillo_x, tobillo_y = puntos["tobillo_norm"]
 
-    desplazamiento = (
-        tobillo_x
-        - estado_eval["base_tobillo_x"]
-    )
+    separacion_relativa = tobillo_x - cadera_x
 
+    # Registrar la posición inicial de la pierna y la cadera.
+    # El participante debe comenzar con la pierna al centro.
+    if "_abduccion_base_relativa" not in estado_eval:
+        estado_eval["_abduccion_base_relativa"] = separacion_relativa
+        estado_eval["_abduccion_base_cadera_x"] = cadera_x
+
+    # Movimiento del tobillo respecto de su propia cadera
     desplazamiento_abs = abs(
-        desplazamiento
+        separacion_relativa
+        - estado_eval["_abduccion_base_relativa"]
     )
 
-    pierna_abierta = desplazamiento_abs > 0.08
-    pierna_centro = desplazamiento_abs < 0.03
+    # Detectar desplazamientos excesivos de la cadera
+    desplazamiento_cadera = abs(
+        cadera_x - estado_eval["_abduccion_base_cadera_x"]
+    )
+
+    # Ajustar sensibilidad según el tamaño visible de la pierna
+    escala = max(0.25, abs(tobillo_y - cadera_y))
+
+    umbral_abierta = max(0.055, 0.15 * escala)
+    umbral_centro = max(0.025, 0.06 * escala)
+    tolerancia_cadera = max(0.07, 0.16 * escala)
+
+    # Verificar que la cadera permanezca relativamente estable
+    cadera_estable = desplazamiento_cadera < tolerancia_cadera
+
+    pierna_abierta = (
+        desplazamiento_abs > umbral_abierta
+        and cadera_estable
+    )
+
+    pierna_centro = (
+        desplazamiento_abs < umbral_centro
+        and cadera_estable
+    )
 
     movimiento_parcial = (
-        desplazamiento_abs > 0.04
+        desplazamiento_abs > umbral_abierta * 0.5
+        and cadera_estable
     )
+
+    # Evitar confirmar movimientos intermitentes como continuos
+    condiciones = {
+        "inicio": pierna_centro,
+        "centro": pierna_abierta,
+        "abierta": pierna_centro,
+    }
+
+    if not condiciones.get(estado_eval["fase"], True):
+        estado_eval["fase_candidata"] = None
+        estado_eval["fase_candidata_desde"] = None
+
 
     if estado_eval["fase"] == "inicio":
 
@@ -1373,6 +1398,7 @@ def evaluar_abduccion_cadera(
 
 def evaluar_sit_to_stand(
     angulo,
+    puntos,
     estado_eval
 ):
 
@@ -1389,6 +1415,33 @@ def evaluar_sit_to_stand(
             estado_eval,
             "No se detecta correctamente la rodilla"
         )
+
+    # ==============================================
+    # LEVANTARSE Y SENTARSE: CONTROL DE CADERA
+    # ==============================================
+
+    cadera_y = puntos["cadera_norm"][1]
+    tobillo_y = puntos["tobillo_norm"][1]
+
+    # Referencia tomada al confirmar la posición sentada
+    base_cadera = estado_eval.get("_sts_cadera_sentado")
+    escala = estado_eval.get("_sts_escala_pierna", 0.25)
+
+    # Umbrales iniciales según el tamaño visible de la pierna
+    umbral_subida = max(0.055, 0.18 * escala)
+    umbral_retorno = max(0.035, 0.10 * escala)
+
+    # La cadera debe subir para reconocer que se levantó
+    cadera_subio = (
+        base_cadera is not None
+        and base_cadera - cadera_y > umbral_subida
+    )
+
+    # Debe regresar cerca de la altura inicial
+    cadera_volvio = (
+        base_cadera is not None
+        and abs(base_cadera - cadera_y) < umbral_retorno
+    )
 
     sentado = angulo < 120
     de_pie = angulo > 155
@@ -1412,6 +1465,14 @@ def evaluar_sit_to_stand(
             ):
 
                 estado_eval["fase"] = "sentado"
+
+                # Guardar la altura de la cadera sentado
+                estado_eval["_sts_cadera_sentado"] = cadera_y
+
+                # Escala corporal para ajustar sensibilidad
+                estado_eval["_sts_escala_pierna"] = max(
+                    0.25, abs(tobillo_y - cadera_y)
+                )
 
                 mensaje = (
                     "Posición inicial detectada"
@@ -1442,8 +1503,12 @@ def evaluar_sit_to_stand(
             movimiento_parcial,
             0.20
         )
+        # Evitar confirmar una postura si dejó de cumplirse
+        if not (de_pie and cadera_subio):
+            estado_eval["fase_candidata"] = None
+            estado_eval["fase_candidata_desde"] = None
 
-        if de_pie:
+        if de_pie and cadera_subio:
 
             if confirmar_fase_estable(
                 estado_eval,
@@ -1489,7 +1554,12 @@ def evaluar_sit_to_stand(
 
     elif estado_eval["fase"] == "de_pie":
 
-        if sentado:
+        # Exigir continuidad en el regreso al asiento
+        if not (sentado and cadera_volvio):
+            estado_eval["fase_candidata"] = None
+            estado_eval["fase_candidata_desde"] = None
+
+        if sentado and cadera_volvio:
 
             if confirmar_fase_estable(
                 estado_eval,
@@ -1519,142 +1589,233 @@ def evaluar_sit_to_stand(
 
     return rep_valida, estado_eval, mensaje
 
+def evaluar_marcha_sitio(angulo, puntos, estado_eval):
+    """
+    Marcha alternada: confirma subida y bajada
+    de cada rodilla antes de sumar una repetición.
+    """
 
-def evaluar_marcha_sitio(
-    angulo,
-    puntos,
-    estado_eval
-):
+    estado_eval["intento_no_completado_evento"] = False
 
-    rep_valida = False
+    lado = puntos.get("lado")
+    contraria = puntos.get("contraria")
 
-    estado_eval[
-        "intento_no_completado_evento"
-    ] = False
+    if lado not in ("LEFT", "RIGHT") or contraria is None:
+        return False, estado_eval, "Mantén ambas piernas visibles"
 
-    rodilla_y = puntos["rodilla_norm"][1]
+    lado_opuesto = "LEFT" if lado == "RIGHT" else "RIGHT"
 
-    if estado_eval.get("base_rodilla_y") is None:
-        estado_eval["base_rodilla_y"] = rodilla_y
+    piernas = {
+        lado: puntos,
+        lado_opuesto: contraria
+    }
 
-    diferencia_altura = (
-        estado_eval["base_rodilla_y"]
-        - rodilla_y
-    )
+    ahora = time.monotonic()
 
-    rodilla_arriba = diferencia_altura > 0.08
-    rodilla_abajo = diferencia_altura < 0.03
+    # Una interrupción prolongada cancela la
+    # repetición incompleta, pero conserva
+    # qué pierna hizo la última repetición válida.
+    ultimo = estado_eval.get("_marcha_ultimo_frame")
 
-    movimiento_parcial = (
-        diferencia_altura > 0.04
-    )
+    if ultimo is not None and ahora - ultimo > 0.7:
+        estado_eval["fase"] = "inicio"
+        estado_eval.pop("_marcha_base", None)
+        estado_eval.pop("_marcha_pierna_activa", None)
+        estado_eval["fase_candidata"] = None
+        estado_eval["fase_candidata_desde"] = None
+
+    estado_eval["_marcha_ultimo_frame"] = ahora
+
+    # Medir la rodilla respecto de su propia cadera.
+    # Así reducimos el efecto de subir o bajar
+    # ligeramente todo el cuerpo.
+    distancia = {
+        l: p["rodilla_norm"][1] - p["cadera_norm"][1]
+        for l, p in piernas.items()
+    }
+
+    # Confirmación temporal de cada fase.
+    def confirmar(nombre, condicion, segundos):
+
+        if not condicion:
+            if estado_eval.get("fase_candidata") == nombre:
+                estado_eval["fase_candidata"] = None
+                estado_eval["fase_candidata_desde"] = None
+            return False
+
+        if estado_eval.get("fase_candidata") != nombre:
+            estado_eval["fase_candidata"] = nombre
+            estado_eval["fase_candidata_desde"] = ahora
+            return False
+
+        if (
+            ahora - estado_eval["fase_candidata_desde"]
+            >= segundos
+        ):
+            estado_eval["fase_candidata"] = None
+            estado_eval["fase_candidata_desde"] = None
+            return True
+
+        return False
+
+    # ==========================================
+    # FASE 1: POSICIÓN INICIAL
+    # ==========================================
 
     if estado_eval["fase"] == "inicio":
 
-        if rodilla_abajo:
+        preparado = all(
+            0.10 < distancia[l] < 0.38
+            for l in piernas
+        )
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "abajo",
-                0.30
-            ):
+        if confirmar("marcha_inicio", preparado, 0.30):
+            estado_eval["_marcha_base"] = distancia.copy()
+            estado_eval["fase"] = "abajo"
 
-                estado_eval["fase"] = "abajo"
-                mensaje = "Posición inicial detectada"
+        return (
+            False,
+            estado_eval,
+            "Comienza de pie con ambos pies en el suelo"
+        )
 
-            else:
+    base = estado_eval.get("_marcha_base")
 
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
+    if base is None:
+        estado_eval["fase"] = "inicio"
+        return False, estado_eval, "Colócate en posición inicial"
 
-        else:
+    # Sensibilidad proporcional al tamaño aparente
+    # del muslo dentro de la imagen.
+    escala = max(
+        0.12,
+        (base["LEFT"] + base["RIGHT"]) / 2
+    )
 
-            mensaje = (
-                "Colócate en la posición inicial"
-            )
+    umbral_subida = max(0.045, escala * 0.30)
+    umbral_bajada = max(0.022, escala * 0.12)
 
-        return rep_valida, estado_eval, mensaje
+    elevacion = {
+        l: base[l] - distancia[l]
+        for l in piernas
+    }
+
+    ambos_abajo = all(
+        elevacion[l] < umbral_bajada
+        for l in piernas
+    )
+
+    # ==========================================
+    # FASE 2: ELEVAR UNA RODILLA
+    # ==========================================
 
     if estado_eval["fase"] == "abajo":
 
-        actualizar_inicio_intento(
-            estado_eval,
-            movimiento_parcial,
-            0.20
+        ultimo_lado = estado_eval.get(
+            "_marcha_ultima_pierna"
         )
 
-        if rodilla_arriba:
+        candidato = None
 
-            if confirmar_fase_estable(
-                estado_eval,
-                "arriba",
-                0.30
+        for l in ("LEFT", "RIGHT"):
+
+            otro = "RIGHT" if l == "LEFT" else "LEFT"
+
+            if (
+                elevacion[l] > umbral_subida
+                and elevacion[otro] < umbral_subida * 0.45
             ):
+                candidato = l
+                break
 
-                estado_eval["fase"] = "arriba"
+        if candidato is None:
 
-                reiniciar_intento(
-                    estado_eval
-                )
+            estado_eval["fase_candidata"] = None
+            estado_eval["fase_candidata_desde"] = None
 
-                mensaje = (
-                    "Rodilla elevada, "
-                    "baja con control"
-                )
+            return (
+                False,
+                estado_eval,
+                "Eleva una rodilla a la vez"
+            )
 
-            else:
+        # No contar dos repeticiones seguidas
+        # con la misma pierna.
+        if candidato == ultimo_lado:
 
-                mensaje = (
-                    "Mantén la rodilla elevada un momento"
-                )
+            estado_eval["fase_candidata"] = None
+            estado_eval["fase_candidata_desde"] = None
 
-        elif detectar_retorno_sin_completar(
-            estado_eval,
-            rodilla_abajo
+            return (
+                False,
+                estado_eval,
+                "Ahora eleva la otra pierna"
+            )
+
+        if confirmar(
+            "marcha_arriba_" + candidato,
+            True,
+            0.18
         ):
 
-            mensaje = (
-                "Intenta elevar un poco más la rodilla"
+            estado_eval["_marcha_pierna_activa"] = candidato
+            estado_eval["fase"] = "arriba"
+
+        return (
+            False,
+            estado_eval,
+            "Mantén la rodilla elevada un momento"
+        )
+
+    # ==========================================
+    # FASE 3: REGRESAR LA RODILLA AL SUELO
+    # ==========================================
+
+    if estado_eval["fase"] == "arriba":
+
+        activa = estado_eval.get(
+            "_marcha_pierna_activa"
+        )
+
+        if activa is None:
+            estado_eval["fase"] = "abajo"
+            return False, estado_eval, "Eleva una rodilla"
+
+        if confirmar(
+            "marcha_abajo",
+            ambos_abajo,
+            0.18
+        ):
+
+            estado_eval["fase"] = "abajo"
+
+            # Recordar qué pierna completó la repetición
+            estado_eval["_marcha_ultima_pierna"] = activa
+
+            estado_eval.pop(
+                "_marcha_pierna_activa",
+                None
             )
 
-        else:
-
-            mensaje = (
-                "Eleva la rodilla con control"
-            )
-
-    elif estado_eval["fase"] == "arriba":
-
-        if rodilla_abajo:
-
-            if confirmar_fase_estable(
+            return (
+                True,
                 estado_eval,
-                "abajo",
-                0.30
-            ):
-
-                rep_valida = True
-                estado_eval["fase"] = "abajo"
-
-                mensaje = (
-                    "Repetición válida: marcha en el sitio"
-                )
-
-            else:
-
-                mensaje = (
-                    "Mantén la posición inicial un momento"
-                )
-
-        else:
-
-            mensaje = (
-                "Baja la rodilla con control"
+                "Repetición válida: alterna de pierna"
             )
 
-    return rep_valida, estado_eval, mensaje
+        return (
+            False,
+            estado_eval,
+            "Baja la rodilla con control"
+        )
 
+    estado_eval["fase"] = "inicio"
+
+    return (
+        False,
+        estado_eval,
+        "Colócate frente a la cámara"
+    )
 
 def evaluar_movimiento(ejercicio, angulo, puntos, estado_eval):
     tipo = ejercicio.get("tipo_evaluacion", "extension_rodilla")
@@ -1681,7 +1842,7 @@ def evaluar_movimiento(ejercicio, angulo, puntos, estado_eval):
         return evaluar_abduccion_cadera(angulo, puntos, estado_eval)
 
     if tipo == "sit_to_stand":
-        return evaluar_sit_to_stand(angulo, estado_eval)
+        return evaluar_sit_to_stand(angulo, puntos, estado_eval)
 
     if tipo == "marcha_sitio":
         return evaluar_marcha_sitio(angulo, puntos, estado_eval)
